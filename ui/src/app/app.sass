@@ -1,46 +1,264 @@
 .add-url-box
-    max-width: 960px
-    margin: 4rem auto
+  position: relative
+  max-width: 980px
+  margin: 3.25rem auto 2.5rem
+  padding: clamp(1.35rem, 3vw, 2.5rem)
+  overflow: hidden
+  background: color-mix(in srgb, var(--bs-body-bg) 94%, var(--bs-primary) 6%)
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 72%, transparent)
+  border-radius: 1.5rem
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12)
+
+  &::before
+    content: ''
+    position: absolute
+    inset: 0 0 auto
+    height: 3px
+    background: linear-gradient(90deg, #7657ff, #3b82f6 55%, #24c8a5)
+
+.navbar
+  min-height: 4.25rem
+  background: color-mix(in srgb, var(--bs-body-bg) 84%, transparent) !important
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color) 65%, transparent)
+  backdrop-filter: blur(18px)
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.04)
+
+.navbar-brand
+  gap: 0.7rem
+  color: var(--bs-emphasis-color)
+  font-size: 1rem
+  font-weight: 700
+  letter-spacing: -0.02em
+
+  &:hover
+    color: var(--bs-emphasis-color)
+
+.brand-mark
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 2.25rem
+  height: 2.25rem
+  color: #fff
+  background: linear-gradient(135deg, #7657ff, #3b82f6)
+  border-radius: 0.7rem
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.28)
+
+.theme-select-btn
+  width: 2.6rem
+  height: 2.6rem
+  justify-content: center
+  padding: 0
+  color: var(--bs-secondary-color)
+  background: var(--bs-tertiary-bg)
+  border: 1px solid var(--bs-border-color)
+  border-radius: 0.8rem
+
+  &:hover, &:focus
+    color: var(--bs-emphasis-color)
+    background: var(--bs-secondary-bg)
+    border-color: color-mix(in srgb, var(--bs-primary) 45%, var(--bs-border-color))
+
+.add-url-box
+  .form-control, .form-select
+    border-color: color-mix(in srgb, var(--bs-border-color) 82%, transparent)
+    box-shadow: none
+
+    &:focus
+      border-color: color-mix(in srgb, var(--bs-primary) 70%, white)
+      box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--bs-primary) 16%, transparent)
+
+  .input-group-lg
+    border-radius: 0.95rem
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08) !important
+
+    .form-control
+      min-height: 3.6rem
+      padding-left: 1.1rem
+      border-radius: 0.95rem 0 0 0.95rem
+
+    .btn:last-child
+      border-radius: 0 0.95rem 0.95rem 0
+
+  .btn-primary
+    min-width: 9.5rem
+    font-weight: 650
+    background: linear-gradient(135deg, #7657ff, #4169e1)
+    border-color: transparent
+    box-shadow: 0 10px 22px rgba(79, 70, 229, 0.24)
+
+    &:hover
+      transform: translateY(-1px)
+      box-shadow: 0 13px 26px rgba(79, 70, 229, 0.32)
+
+.option-field
+  label
+    display: block
+    margin: 0 0 0.45rem 0.15rem
+    color: var(--bs-secondary-color)
+    font-size: 0.74rem
+    font-weight: 700
+    letter-spacing: 0.08em
+    text-transform: uppercase
+
+  .form-select
+    min-height: 2.85rem
+    padding-left: 0.95rem
+    background-color: color-mix(in srgb, var(--bs-body-bg) 86%, var(--bs-tertiary-bg) 14%)
+    border-radius: 0.8rem
+
+.advanced-toggle
+  display: inline-flex
+  align-items: center
+  gap: 0.35rem
+  padding: 0.45rem 0.7rem
+  color: var(--bs-primary)
+  font-weight: 600
+  background: color-mix(in srgb, var(--bs-primary) 9%, transparent)
+  border: 1px solid color-mix(in srgb, var(--bs-primary) 18%, transparent)
+  border-radius: 0.7rem
+
+  &:hover
+    color: var(--bs-primary)
+    background: color-mix(in srgb, var(--bs-primary) 14%, transparent)
 
 .metube-section-header
-    font-size: 1.8rem
-    font-weight: 300
-    position: relative
-    background: var(--bs-secondary-bg)
-    padding: 0.5rem 0
-    margin-top: 3.5rem
+  font-size: 1.1rem
+  font-weight: 650
+  background: transparent
 
 .metube-section-toggle
-    // Positioned so it paints above the header's full-bleed :before overlay.
-    position: relative
-    display: flex
-    align-items: center
-    // Title left, chevron against the right edge, so all three section titles
-    // stay on the same left margin whether or not a chevron is present.
-    justify-content: space-between
-    gap: 0.75rem
-    width: 100%
-    padding: 0
-    border: 0
-    background: none
-    color: inherit
-    font: inherit
-    text-align: left
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 0.75rem
+  width: 100%
+  padding: 1.15rem 1.3rem
+  border: 0
+  background: none
+  color: inherit
+  font: inherit
+  text-align: left
+
+  &:hover
+    background: color-mix(in srgb, var(--bs-primary) 5%, transparent)
+
+.section-heading
+  display: flex
+  align-items: center
+  gap: 0.65rem
+
+.section-count
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  min-width: 1.75rem
+  height: 1.55rem
+  padding: 0 0.45rem
+  color: var(--bs-secondary-color)
+  background: var(--bs-tertiary-bg)
+  border: 1px solid var(--bs-border-color)
+  border-radius: 999px
+  font-size: 0.72rem
+  font-weight: 700
 
 .metube-section-chevron
-    font-size: 1.1rem
-    width: 1.1rem
-    color: var(--bs-secondary-color)
+  font-size: 0.85rem
+  width: 1rem
+  color: var(--bs-secondary-color)
 
-.metube-section-header:before
-    content: ""
-    position: absolute
-    top: 0
-    bottom: 0
-    left: -9999px
-    right: 0
-    border-left: 9999px solid var(--bs-secondary-bg)
-    box-shadow: 9999px 0 0 var(--bs-secondary-bg)
+.download-section
+  margin-bottom: 1.25rem
+  overflow: hidden
+  background: color-mix(in srgb, var(--bs-body-bg) 96%, var(--bs-primary) 4%)
+  border: 1px solid color-mix(in srgb, var(--bs-border-color) 78%, transparent)
+  border-radius: 1.2rem
+  box-shadow: 0 15px 44px rgba(15, 23, 42, 0.065)
+
+.section-actions
+  display: flex
+  align-items: center
+  flex-wrap: wrap
+  gap: 0.35rem
+  padding: 0.7rem 1rem
+  border-top: 1px solid var(--bs-border-color)
+  border-bottom: 1px solid var(--bs-border-color)
+
+.action-button
+  padding: 0.4rem 0.65rem
+  color: var(--bs-secondary-color)
+  border-radius: 0.6rem
+  font-size: 0.82rem
+  font-weight: 550
+
+  &:hover:not(:disabled)
+    color: var(--bs-emphasis-color)
+    background: var(--bs-tertiary-bg)
+
+  &.action-button-primary
+    color: var(--bs-primary)
+    background: color-mix(in srgb, var(--bs-primary) 8%, transparent)
+
+.table-shell
+  padding: 0 0.9rem 0.75rem
+
+.modern-table
+  --bs-table-bg: transparent
+
+  thead th
+    padding-top: 0.95rem
+    padding-bottom: 0.65rem
+    color: var(--bs-secondary-color)
+    border-bottom: 1px solid var(--bs-border-color) !important
+    font-size: 0.72rem
+    font-weight: 700
+    letter-spacing: 0.065em
+    text-transform: uppercase
+
+  tbody td
+    padding-top: 0.9rem
+    padding-bottom: 0.9rem
+    border-color: color-mix(in srgb, var(--bs-border-color) 65%, transparent)
+
+  tbody tr
+    transition: background-color 140ms ease
+
+    &:hover
+      background: color-mix(in srgb, var(--bs-primary) 4%, transparent)
+
+  .empty-row:hover
+    background: transparent
+
+.empty-state
+  display: flex
+  align-items: center
+  justify-content: center
+  gap: 0.85rem
+  min-height: 6.5rem
+  color: var(--bs-secondary-color)
+
+  > span:last-child
+    display: flex
+    flex-direction: column
+    gap: 0.15rem
+
+  strong
+    color: var(--bs-emphasis-color)
+    font-size: 0.9rem
+    font-weight: 650
+
+  small
+    font-size: 0.8rem
+
+.empty-state-icon
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  width: 2.4rem
+  height: 2.4rem
+  color: var(--bs-primary)
+  background: color-mix(in srgb, var(--bs-primary) 10%, transparent)
+  border-radius: 0.75rem
 
 button:hover
     text-decoration: none
@@ -98,11 +316,13 @@ td
 
 main
   flex-grow: 1
+  padding-top: 0.25rem
 
 .footer
   width: 100%
   padding: 10px 0
-  background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.1))
+  background: color-mix(in srgb, var(--bs-body-bg) 90%, var(--bs-tertiary-bg) 10%)
+  border-top: 1px solid color-mix(in srgb, var(--bs-border-color) 70%, transparent)
 
   .footer-content
     display: flex
@@ -110,7 +330,7 @@ main
     align-items: center
     flex-wrap: wrap
     gap: 20px
-    color: #fff
+    color: var(--bs-secondary-color)
     font-size: 0.9rem
 
     .version-item
@@ -128,19 +348,23 @@ main
         font-family: monospace
         font-size: 0.85rem
         padding: 2px 6px
-        background: rgba(255,255,255,0.1)
+        background: var(--bs-tertiary-bg)
+        border: 1px solid var(--bs-border-color)
         border-radius: 4px
 
     .version-separator
       width: 1px
       height: 16px
-      background: rgba(255,255,255,0.2)
+      background: var(--bs-border-color)
       margin: 0 4px
 
     .problem-report-button
       display: inline-flex
       align-items: center
       gap: 0.4rem
+      color: var(--bs-warning-text-emphasis)
+      border-color: color-mix(in srgb, var(--bs-warning) 55%, var(--bs-border-color))
+      border-radius: 0.65rem
 
 .download-metrics
   display: flex
@@ -153,7 +377,7 @@ main
     align-items: center
     gap: 6px
     font-size: 0.9rem
-    color: #adb5bd
+    color: var(--bs-secondary-color)
 
     fa-icon
       font-size: 1rem
@@ -223,3 +447,36 @@ main
 
   &.active
     color: var(--bs-success-text-emphasis)
+
+@media (max-width: 767.98px)
+  .navbar
+    min-height: 3.8rem
+
+  .download-metrics
+    display: none
+
+  .add-url-box
+    margin: 1.25rem auto 1.5rem
+    border-radius: 1.15rem
+
+    .form-control.form-control-lg
+      min-height: 3.25rem
+      border-radius: 0.8rem
+
+    .btn-group .btn
+      border-radius: 0.8rem
+
+  .download-section
+    border-radius: 1rem
+
+  .metube-section-toggle
+    padding: 1rem
+
+  .section-actions
+    padding: 0.6rem 0.7rem
+
+  .table-shell
+    padding-inline: 0.55rem
+
+  .footer .footer-content
+    gap: 0.7rem

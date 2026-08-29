@@ -1,8 +1,8 @@
-<nav class="navbar navbar-expand-md navbar-dark">
-  <div class="container-fluid">
+<nav class="navbar navbar-expand-md">
+  <div class="container container-xl">
     <a class="navbar-brand d-flex align-items-center" href="#">
-      <fa-icon [icon]="faDownload" class="me-2" />
-      Audio Downloader
+      <span class="brand-mark"><fa-icon [icon]="faDownload" /></span>
+      <span>Audio Downloader</span>
     </a>
     <div class="download-metrics">
       @if (activeDownloads > 0) {
@@ -50,9 +50,10 @@
     -->
     <div class="navbar-nav ms-auto">
       <div class="nav-item dropdown" ngbDropdown placement="bottom-end">
-        <button class="btn btn-link nav-link py-2 px-0 px-sm-2 dropdown-toggle d-flex align-items-center"
+        <button class="btn theme-select-btn dropdown-toggle d-flex align-items-center"
           id="theme-select"
           type="button"
+          aria-label="Choose color theme"
           aria-expanded="false"
           ngbDropdownToggle>
           @if(activeTheme){
@@ -85,7 +86,7 @@
 
 <main role="main" class="container container-xl">
   <form #f="ngForm">
-    <div class="container add-url-box">
+    <div class="add-url-box">
       <!-- Main URL Input with Download Button -->
       <div class="row mb-4">
         <div class="col">
@@ -111,6 +112,7 @@
               <button class="btn btn-primary btn-lg px-4" type="submit"
                 (click)="addDownload()"
                 [disabled]="downloads.loading">
+                <fa-icon [icon]="faDownload" class="me-2" />
                 Download
               </button>
             }
@@ -122,7 +124,7 @@
               autocomplete="off"
               spellcheck="false"
               class="form-control form-control-lg"
-              placeholder="Enter media, channel, or playlist URL"
+              placeholder="Paste a media, channel, or playlist link"
               [(ngModel)]="addUrl"
               [ngModelOptions]="{standalone: true}"
               [disabled]="addInProgress || downloads.loading">
@@ -137,7 +139,7 @@
               autocomplete="off"
               spellcheck="false"
               class="form-control form-control-lg"
-              placeholder="Enter media, channel, or playlist URL"
+              placeholder="Paste a media, channel, or playlist link"
               [(ngModel)]="addUrl"
               [ngModelOptions]="{standalone: true}"
               [disabled]="addInProgress || downloads.loading">
@@ -149,9 +151,10 @@
       <!-- Options Row -->
       <div class="row mb-3 g-3">
         <div class="col-md-6">
-          <div class="input-group">
-            <span class="input-group-text">Audio format</span>
+          <div class="option-field">
+            <label for="audio-format">Audio format</label>
             <select class="form-select"
+              id="audio-format"
               name="format"
               [(ngModel)]="format"
               (change)="formatChanged()"
@@ -163,9 +166,10 @@
           </div>
         </div>
         <div class="col-md-6">
-          <div class="input-group">
-            <span class="input-group-text">Audio quality</span>
+          <div class="option-field">
+            <label for="audio-quality">Audio quality</label>
             <select class="form-select"
+              id="audio-quality"
               name="quality"
               [(ngModel)]="quality"
               (change)="qualityChanged()"
@@ -181,11 +185,11 @@
       <div class="row mb-3 g-3">
         <div class="col-12 text-start">
           <button type="button"
-            class="btn btn-link p-0 text-decoration-none"
+            class="btn advanced-toggle"
             (click)="toggleAdvanced()"
             [attr.aria-expanded]="isAdvancedOpen"
             aria-controls="advancedOptions">
-            Advanced Options
+            <span>Advanced options</span>
             <fa-icon
               [icon]="isAdvancedOpen ? faChevronDown : faChevronRight"
               class="ms-1" />
@@ -480,19 +484,23 @@
       Connecting to server...
     </div>
   }
+  <section class="download-section">
   <div class="metube-section-header">
     <button type="button" class="metube-section-toggle" (click)="toggleDownloadingCollapsed()" [attr.aria-expanded]="!downloadingCollapsed">
-      <span>Downloading</span>
+      <span class="section-heading">
+        <span>Downloading</span>
+        <span class="section-count">{{ downloads.queue.size }}</span>
+      </span>
       <fa-icon [icon]="downloadingCollapsed ? faChevronRight : faChevronDown" class="metube-section-chevron" />
     </button>
   </div>
   @if (!downloadingCollapsed) {
-    <div class="px-2 py-3 border-bottom">
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" disabled #queueDelSelected (click)="delSelectedDownloads('queue')"><fa-icon [icon]="faTrashAlt" />&nbsp; Cancel selected</button>
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" disabled #queueDownloadSelected (click)="startSelectedDownloads('queue')"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
+    <div class="section-actions">
+      <button type="button" class="btn action-button" disabled #queueDelSelected (click)="delSelectedDownloads('queue')"><fa-icon [icon]="faTrashAlt" />&nbsp; Cancel selected</button>
+      <button type="button" class="btn action-button" disabled #queueDownloadSelected (click)="startSelectedDownloads('queue')"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
     </div>
-    <div class="overflow-auto">
-      <table class="table">
+    <div class="table-shell overflow-auto">
+      <table class="table modern-table mb-0">
         <thead>
           <tr>
             <th scope="col" style="width: 1rem;">
@@ -506,6 +514,19 @@
           </tr>
         </thead>
         <tbody>
+          @if (downloads.queue.size === 0) {
+            <tr class="empty-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <span class="empty-state-icon"><fa-icon [icon]="faDownload" /></span>
+                  <span>
+                    <strong>No active downloads</strong>
+                    <small>Paste a link above to start downloading audio.</small>
+                  </span>
+                </div>
+              </td>
+            </tr>
+          }
           @for (download of downloads.queue | keyvalue: asIsOrder; track download.key) {
             <tr [class.disabled]='download.value.deleting'>
               <td>
@@ -555,24 +576,28 @@
       </table>
     </div>
   }
+  </section>
 
+  <section class="download-section">
   <div class="metube-section-header">
     <button type="button" class="metube-section-toggle" (click)="toggleCompletedCollapsed()" [attr.aria-expanded]="!completedCollapsed">
-      <span>Completed</span>
+      <span class="section-heading">
+        <span>Completed</span>
+        <span class="section-count">{{ downloads.done.size }}</span>
+      </span>
       <fa-icon [icon]="completedCollapsed ? faChevronRight : faChevronDown" class="metube-section-chevron" />
     </button>
   </div>
   @if (!completedCollapsed) {
-    <div class="px-2 py-3 border-bottom">
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" (click)="toggleSortOrder()" ngbTooltip="{{ sortAscending ? 'Oldest first' : 'Newest first' }}"><fa-icon [icon]="sortAscending ? faSortAmountUp : faSortAmountDown" />&nbsp; {{ sortAscending ? 'Oldest first' : 'Newest first' }}</button>
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" disabled #doneDelSelected (click)="delSelectedDownloads('done')"><fa-icon [icon]="faTrashAlt" />&nbsp; Clear selected</button>
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" [disabled]="!hasCompletedDone" (click)="clearCompletedDownloads()"><fa-icon [icon]="faCheckCircle" />&nbsp; Clear completed</button>
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" [disabled]="!hasFailedDone" (click)="clearFailedDownloads()"><fa-icon [icon]="faTimesCircle" />&nbsp; Clear failed</button>
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" [disabled]="!hasFailedDone" (click)="retryFailedDownloads()"><fa-icon [icon]="faRedoAlt" />&nbsp; Retry failed</button>
-      <button type="button" class="btn btn-link text-decoration-none px-0 me-4" disabled #doneDownloadSelected (click)="downloadSelectedFiles()"><fa-icon [icon]="faDownload" />&nbsp; Download Selected</button>
+    <div class="section-actions">
+      <button type="button" class="btn action-button action-button-primary" (click)="toggleSortOrder()" ngbTooltip="{{ sortAscending ? 'Oldest first' : 'Newest first' }}"><fa-icon [icon]="sortAscending ? faSortAmountUp : faSortAmountDown" />&nbsp; {{ sortAscending ? 'Oldest first' : 'Newest first' }}</button>
+      <button type="button" class="btn action-button" disabled #doneDelSelected (click)="delSelectedDownloads('done')"><fa-icon [icon]="faTrashAlt" />&nbsp; Clear selected</button>
+      <button type="button" class="btn action-button" [disabled]="!hasFailedDone" (click)="clearFailedDownloads()"><fa-icon [icon]="faTimesCircle" />&nbsp; Clear failed</button>
+      <button type="button" class="btn action-button" [disabled]="!hasFailedDone" (click)="retryFailedDownloads()"><fa-icon [icon]="faRedoAlt" />&nbsp; Retry failed</button>
+      <button type="button" class="btn action-button" disabled #doneDownloadSelected (click)="downloadSelectedFiles()"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
     </div>
-    <div class="overflow-auto">
-      <table class="table">
+    <div class="table-shell overflow-auto">
+      <table class="table modern-table mb-0">
         <thead>
           <tr>
             <th scope="col" style="width: 1rem;">
@@ -587,6 +612,19 @@
           </tr>
         </thead>
         <tbody>
+          @if (downloads.done.size === 0) {
+            <tr class="empty-row">
+              <td colspan="7">
+                <div class="empty-state">
+                  <span class="empty-state-icon"><fa-icon [icon]="faCheckCircle" /></span>
+                  <span>
+                    <strong>No download history yet</strong>
+                    <small>Finished and failed downloads will appear here.</small>
+                  </span>
+                </div>
+              </td>
+            </tr>
+          }
           @for (entry of cachedSortedDone; track entry[0]) {
             <tr [class.disabled]='entry[1].deleting'>
               <td>
@@ -713,10 +751,11 @@
       </table>
     </div>
   }
+  </section>
 
 </main><!-- /.container -->
 
-<footer class="footer navbar-dark bg-dark py-3 mt-5">
+<footer class="footer py-3 mt-5">
   <div class="container text-center">
     <div class="footer-content">
       @if (ytDlpVersion) {
