@@ -7,6 +7,10 @@ on:
     paths-ignore:
       - '**.md'
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   quality-checks:
     runs-on: ubuntu-latest
@@ -49,38 +53,26 @@ jobs:
           format: table
           severity: CRITICAL,HIGH
 
-  dockerhub-build-push:
+  ghcr-build-push:
     needs: quality-checks
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Get current date
+      - name: Get current date
         id: date
         run: echo "date=$(date +'%Y.%m.%d')" >> "$GITHUB_OUTPUT"
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v7
-      -
-        name: Set up QEMU
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Login to GitHub Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        name: Build and push
+      - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -89,34 +81,16 @@ jobs:
           build-args: |
             VERSION=${{ steps.date.outputs.date }}
           tags: |
-            ${{ secrets.DOCKERHUB_REPOSITORY }}:latest
-            ${{ secrets.DOCKERHUB_REPOSITORY }}:${{ steps.date.outputs.date }}
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ steps.date.outputs.date }}
 
-  dockerhub-sync-readme:
-    needs: dockerhub-build-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Sync README
-        uses: docker://lsiodev/readme-sync:latest
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-          GIT_REPOSITORY: ${{ github.repository }}
-          DOCKER_REPOSITORY: ${{ secrets.DOCKERHUB_REPOSITORY }}
-          GIT_BRANCH: master
-        with:
-          entrypoint: node
-          args: /opt/docker-readme-sync/sync
-
   create-release:
-    needs: dockerhub-build-push
+    needs: ghcr-build-push
     runs-on: ubuntu-latest
     steps:
       - name: Get current date
         id: date
-        run: echo "date=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+        run: echo "date=$(date +'%Y.%m.%d')" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -136,13 +110,13 @@ jobs:
 
           if [ -z "$LAST_TAG" ]; then
             COMMITS=""
-            echo "has_commits=false" >> $GITHUB_OUTPUT
+            echo "has_commits=false" >> "$GITHUB_OUTPUT"
           else
             COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
             if [ -z "$COMMITS" ]; then
-              echo "has_commits=false" >> $GITHUB_OUTPUT
+              echo "has_commits=false" >> "$GITHUB_OUTPUT"
             else
-              echo "has_commits=true" >> $GITHUB_OUTPUT
+              echo "has_commits=true" >> "$GITHUB_OUTPUT"
             fi
           fi
 
@@ -150,12 +124,11 @@ jobs:
             echo 'commits<<EOF'
             echo "$COMMITS"
             echo EOF
-          } >> $GITHUB_OUTPUT
+          } >> "$GITHUB_OUTPUT"
 
       - name: Generate release body
         id: release_body
         env:
-          DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPOSITORY }}
           GHCR_REPO: ghcr.io/${{ github.repository }}
           DATE: ${{ steps.date.outputs.date }}
           HAS_COMMITS: ${{ steps.commits.outputs.has_commits }}
@@ -165,10 +138,6 @@ jobs:
             echo '## Docker Images'
             echo ''
             echo 'Docker images have been built and pushed:'
-            echo ''
-            echo '**Docker Hub:**'
-            echo "- \`${DOCKERHUB_REPO}:latest\`"
-            echo "- \`${DOCKERHUB_REPO}:${DATE}\`"
             echo ''
             echo '**GitHub Container Registry:**'
             echo "- \`${GHCR_REPO}:latest\`"
