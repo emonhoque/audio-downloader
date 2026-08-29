@@ -484,17 +484,15 @@
       Connecting to server...
     </div>
   }
-  <section class="download-section">
-  <div class="metube-section-header">
-    <button type="button" class="metube-section-toggle" (click)="toggleDownloadingCollapsed()" [attr.aria-expanded]="!downloadingCollapsed">
-      <span class="section-heading">
-        <span>Downloading</span>
-        <span class="section-count">{{ downloads.queue.size }}</span>
-      </span>
-      <fa-icon [icon]="downloadingCollapsed ? faChevronRight : faChevronDown" class="metube-section-chevron" />
-    </button>
-  </div>
-  @if (!downloadingCollapsed) {
+  <section class="download-section active-download-section" [class.d-none]="downloads.queue.size === 0">
+    <div class="metube-section-header">
+      <div class="metube-section-title">
+        <span class="section-heading">
+          <span>Downloading</span>
+          <span class="section-count">{{ downloads.queue.size }}</span>
+        </span>
+      </div>
+    </div>
     <div class="section-actions">
       <button type="button" class="btn action-button" disabled #queueDelSelected (click)="delSelectedDownloads('queue')"><fa-icon [icon]="faTrashAlt" />&nbsp; Cancel selected</button>
       <button type="button" class="btn action-button" disabled #queueDownloadSelected (click)="startSelectedDownloads('queue')"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
@@ -514,19 +512,6 @@
           </tr>
         </thead>
         <tbody>
-          @if (downloads.queue.size === 0) {
-            <tr class="empty-row">
-              <td colspan="6">
-                <div class="empty-state">
-                  <span class="empty-state-icon"><fa-icon [icon]="faDownload" /></span>
-                  <span>
-                    <strong>No active downloads</strong>
-                    <small>Paste a link above to start downloading audio.</small>
-                  </span>
-                </div>
-              </td>
-            </tr>
-          }
           @for (download of downloads.queue | keyvalue: asIsOrder; track download.key) {
             <tr [class.disabled]='download.value.deleting'>
               <td>
@@ -567,7 +552,7 @@
                     <button type="button" class="btn btn-link" [attr.aria-label]="'Start download for ' + download.value.title" (click)="downloadItemByKey(download.key)"><fa-icon [icon]="faDownload" /></button>
                   }
                   <button type="button" class="btn btn-link" [attr.aria-label]="'Remove ' + download.value.title + ' from queue'" (click)="delDownload('queue', download.key)"><fa-icon [icon]="faTrashAlt" /></button>
-                  <a href="{{download.value.url}}" target="_blank" class="btn btn-link" [attr.aria-label]="'Open source URL for ' + download.value.title"><fa-icon [icon]="faExternalLinkAlt" /></a>
+                  <a href="{{download.value.url}}" target="_blank" rel="noopener noreferrer" class="btn btn-link" [attr.aria-label]="'Open source URL for ' + download.value.title"><fa-icon [icon]="faExternalLinkAlt" /></a>
                 </div>
               </td>
             </tr>
@@ -575,7 +560,6 @@
         </tbody>
       </table>
     </div>
-  }
   </section>
 
   <section class="download-section">
@@ -590,11 +574,11 @@
   </div>
   @if (!completedCollapsed) {
     <div class="section-actions">
-      <button type="button" class="btn action-button action-button-primary" (click)="toggleSortOrder()" ngbTooltip="{{ sortAscending ? 'Oldest first' : 'Newest first' }}"><fa-icon [icon]="sortAscending ? faSortAmountUp : faSortAmountDown" />&nbsp; {{ sortAscending ? 'Oldest first' : 'Newest first' }}</button>
+      <button type="button" class="btn action-button action-button-primary" disabled #doneDownloadSelected (click)="downloadSelectedFiles()"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
+      <button type="button" class="btn action-button" (click)="toggleSortOrder()" ngbTooltip="{{ sortAscending ? 'Oldest first' : 'Newest first' }}"><fa-icon [icon]="sortAscending ? faSortAmountUp : faSortAmountDown" />&nbsp; {{ sortAscending ? 'Oldest first' : 'Newest first' }}</button>
       <button type="button" class="btn action-button" disabled #doneDelSelected (click)="delSelectedDownloads('done')"><fa-icon [icon]="faTrashAlt" />&nbsp; Clear selected</button>
       <button type="button" class="btn action-button" [disabled]="!hasFailedDone" (click)="clearFailedDownloads()"><fa-icon [icon]="faTimesCircle" />&nbsp; Clear failed</button>
       <button type="button" class="btn action-button" [disabled]="!hasFailedDone" (click)="retryFailedDownloads()"><fa-icon [icon]="faRedoAlt" />&nbsp; Retry failed</button>
-      <button type="button" class="btn action-button" disabled #doneDownloadSelected (click)="downloadSelectedFiles()"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
     </div>
     <div class="table-shell overflow-auto">
       <table class="table modern-table mb-0">
@@ -608,7 +592,7 @@
             <th scope="col">Format</th>
             <th scope="col">File Size</th>
             <th scope="col">Downloaded</th>
-            <th scope="col" style="width: 8rem;"></th>
+            <th scope="col" style="width: 10rem;"></th>
           </tr>
         </thead>
         <tbody>
@@ -701,19 +685,59 @@
                   <span>{{ entry[1].timestamp / 1000000 | date:'yyyy-MM-dd HH:mm' }}</span>
                 }
               </td>
-              <td>
-                <div class="d-flex">
-                  @if (entry[1].status === 'error') {
-                    <button type="button" class="btn btn-link" [attr.aria-label]="'Retry download for ' + entry[1].title" (click)="retryDownload(entry[0], entry[1])"><fa-icon [icon]="faRedoAlt" /></button>
-                  }
+              <td class="text-end">
+                <div class="completed-row-actions">
                   @if (entry[1].filename) {
-                    <a href="{{buildDownloadLink(entry[1])}}" download class="btn btn-link" [attr.aria-label]="'Download result file for ' + entry[1].title"><fa-icon [icon]="faDownload" /></a>
+                    <a href="{{buildDownloadLink(entry[1])}}" download
+                      class="btn btn-primary btn-sm completed-download-primary"
+                      [attr.aria-label]="'Download result file for ' + entry[1].title">
+                      <fa-icon [icon]="faDownload" class="me-2" />
+                      Download
+                    </a>
+                  } @else if (entry[1].status === 'error') {
+                    <button type="button"
+                      class="btn btn-outline-primary btn-sm completed-download-primary"
+                      [attr.aria-label]="'Retry download for ' + entry[1].title"
+                      (click)="retryDownload(entry[0], entry[1])">
+                      <fa-icon [icon]="faRedoAlt" class="me-2" />
+                      Retry
+                    </button>
                   }
-                  @if (entry[1].filename && canShareDownloads()) {
-                    <button type="button" class="btn btn-link" [attr.aria-label]="'Share result file for ' + entry[1].title" (click)="shareDownload(entry[1])"><fa-icon [icon]="faShareNodes" /></button>
-                  }
-                  <a href="{{entry[1].url}}" target="_blank" class="btn btn-link" [attr.aria-label]="'Open source URL for ' + entry[1].title"><fa-icon [icon]="faExternalLinkAlt" /></a>
-                  <button type="button" class="btn btn-link" [attr.aria-label]="'Delete completed item ' + entry[1].title" (click)="delDownload('done', entry[0])"><fa-icon [icon]="faTrashAlt" /></button>
+                  <div class="dropdown" ngbDropdown placement="bottom-end" container="body">
+                    <button type="button"
+                      class="btn btn-outline-secondary btn-sm completed-more-button"
+                      ngbDropdownToggle
+                      [attr.aria-label]="'More actions for ' + entry[1].title"
+                      title="More actions">
+                      <span aria-hidden="true">⋮</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" ngbDropdownMenu>
+                      @if (entry[1].filename && canShareDownloads()) {
+                        <li>
+                          <button type="button" class="dropdown-item" ngbDropdownItem
+                            (click)="shareDownload(entry[1])">
+                            <fa-icon [icon]="faShareNodes" class="me-2" />
+                            Share file
+                          </button>
+                        </li>
+                      }
+                      <li>
+                        <a href="{{entry[1].url}}" target="_blank" rel="noopener noreferrer"
+                          class="dropdown-item" ngbDropdownItem>
+                          <fa-icon [icon]="faExternalLinkAlt" class="me-2" />
+                          Open source
+                        </a>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <button type="button" class="dropdown-item text-danger" ngbDropdownItem
+                          (click)="delDownload('done', entry[0])">
+                          <fa-icon [icon]="faTrashAlt" class="me-2" />
+                          Delete
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </td>
             </tr>
