@@ -718,8 +718,8 @@
 
 <footer class="footer navbar-dark bg-dark py-3 mt-5">
   <div class="container text-center">
-    @if (ytDlpVersion) {
-      <div class="footer-content">
+    <div class="footer-content">
+      @if (ytDlpVersion) {
         <div class="version-item">
           <span class="version-label">yt-dlp</span>
           <span class="version-value">{{ytDlpVersion}}</span>
@@ -731,8 +731,19 @@
             <span class="version-value">{{ytDlpOptionsUpdateTime}}</span>
           </div>
         }
-      </div>
-    }
+        <div class="version-separator"></div>
+      }
+      <button type="button" class="btn btn-sm btn-outline-warning problem-report-button"
+        [disabled]="reportProblemInProgress" (click)="reportProblem()"
+        title="Notify the administrator that something is broken">
+        @if (reportProblemInProgress) {
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        } @else {
+          <fa-icon [icon]="faTriangleExclamation" />
+        }
+        <span>Something's broken</span>
+      </button>
+    </div>
   </div>
 </footer>
 

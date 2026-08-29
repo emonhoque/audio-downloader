@@ -7,7 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FontAwesomeModule } from '@fortawesome/angular-fontawesome';
 import { NgbModule, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { NgSelectModule } from '@ng-select/ng-select';
-import { faTrashAlt, faCheckCircle, faTimesCircle, faRedoAlt, faSun, faMoon, faCheck, faCircleHalfStroke, faDownload, faExternalLinkAlt, faFileImport, faFileExport, faCopy, faClock, faTachometerAlt, faSortAmountDown, faSortAmountUp, faChevronRight, faChevronDown, faUpload, faShareNodes } from '@fortawesome/free-solid-svg-icons';
+import { faTrashAlt, faCheckCircle, faTimesCircle, faRedoAlt, faSun, faMoon, faCheck, faCircleHalfStroke, faDownload, faExternalLinkAlt, faFileImport, faFileExport, faCopy, faClock, faTachometerAlt, faSortAmountDown, faSortAmountUp, faChevronRight, faChevronDown, faUpload, faShareNodes, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 import { CookieService } from 'ngx-cookie-service';
 import { AddDownloadPayload, DownloadsService } from './services/downloads.service';
 import { MeTubeSocket } from './services/metube-socket.service';
@@ -79,6 +79,7 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   cancelRequested = false;
   hasCookies = false;
   cookieUploadInProgress = false;
+  reportProblemInProgress = false;
   themes: Theme[] = Themes;
   activeTheme: Theme | undefined;
   readonly folderTypeahead = viewChild<NgbTypeahead>('folderTypeahead');
@@ -157,6 +158,7 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   faChevronDown = faChevronDown;
   faUpload = faUpload;
   faShareNodes = faShareNodes;
+  faTriangleExclamation = faTriangleExclamation;
   constructor() {
     this.format = this.cookieService.get('metube_format') || 'mp3';
     this.quality = this.cookieService.get('metube_quality') || '320';
@@ -629,6 +631,30 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
           return;
         }
         this.downloads.delById('done', [key]).subscribe();
+      });
+  }
+
+  reportProblem() {
+    if (this.reportProblemInProgress) {
+      return;
+    }
+
+    this.reportProblemInProgress = true;
+    this.cdr.markForCheck();
+    this.downloads.reportProblem()
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => {
+          this.reportProblemInProgress = false;
+          this.cdr.markForCheck();
+        }),
+      )
+      .subscribe((status: Status) => {
+        if (status.status === 'error') {
+          this.toasts.error(status.msg || 'Could not send the problem report.');
+          return;
+        }
+        this.toasts.success(status.msg || 'Problem report sent.');
       });
   }
 

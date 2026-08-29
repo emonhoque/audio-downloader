@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from watchfiles import DefaultFilter, Change, awatch
 
 import bg_tasks
+from pushover import PushoverNotifier
 from dl_formats import (
     AUDIO_FORMATS,
     DEFAULT_AUDIO_FORMAT,
@@ -102,6 +103,8 @@ class Config:
         'LOGLEVEL': 'INFO',
         'ENABLE_ACCESSLOG': 'false',
         'YTDL_NIGHTLY_UPDATE_TIME': '04:00',
+        'PUSHOVER_APP_TOKEN': '',
+        'PUSHOVER_USER_KEY': '',
     }
 
     _BOOLEAN = ('DOWNLOAD_DIRS_INDEXABLE', 'CUSTOM_DIRS', 'CREATE_CUSTOM_DIRS', 'DELETE_FILE_ON_TRASHCAN', 'HTTPS', 'ENABLE_ACCESSLOG', 'ALLOW_YTDL_OPTIONS_OVERRIDES', 'ALLOW_PRIVATE_ADDRESSES')
@@ -313,6 +316,7 @@ config = Config()
 # This re-applies the log level after Config loads, in case LOGLEVEL was
 # overridden by config file settings or differs from the environment variable.
 logging.getLogger().setLevel(parseLogLevel(str(config.LOGLEVEL)) or logging.INFO)
+pushover = PushoverNotifier(config.PUSHOVER_APP_TOKEN, config.PUSHOVER_USER_KEY)
 
 class ObjectSerializer(json.JSONEncoder):
     def default(self, obj):
@@ -569,6 +573,11 @@ class Notifier(DownloadQueueNotifier):
     async def completed(self, dl):
         log.info(f"Notifier: Download completed - {dl.title}")
         await sio.emit('completed', serializer.encode(dl))
+        if dl.status == 'error':
+            bg_tasks.create_task(
+                pushover.notify_download_failure(dl),
+                name='notify_pushover_download_failure',
+            )
 
     async def canceled(self, id):
         log.info(f"Notifier: Download canceled - {id}")
@@ -876,6 +885,18 @@ async def retry(request):
     post = await _read_json_request(request)
     status = await dqueue.retry(_require_id(post))
     return web.Response(text=serializer.encode(status), content_type='application/json')
+
+
+@routes.post(config.URL_PREFIX + 'report-problem')
+async def report_problem(request):
+    success, msg = await pushover.notify_manual_report(
+        app_version=os.getenv('METUBE_VERSION', 'dev'),
+        yt_dlp_version=yt_dlp_version,
+    )
+    return web.json_response(
+        {'status': 'ok' if success else 'error', 'msg': msg},
+        status=200 if success else 503,
+    )
 
 
 @routes.post(config.URL_PREFIX + 'subscribe')
@@ -1258,6 +1279,7 @@ async def add_cors(request):
 app.router.add_route('OPTIONS', config.URL_PREFIX + 'add', add_cors)
 app.router.add_route('OPTIONS', config.URL_PREFIX + 'cancel-add', add_cors)
 app.router.add_route('OPTIONS', config.URL_PREFIX + 'retry', add_cors)
+app.router.add_route('OPTIONS', config.URL_PREFIX + 'report-problem', add_cors)
 app.router.add_route('OPTIONS', config.URL_PREFIX + 'subscribe', add_cors)
 app.router.add_route('OPTIONS', config.URL_PREFIX + 'subscriptions', add_cors)
 app.router.add_route('OPTIONS', config.URL_PREFIX + 'subscriptions/update', add_cors)

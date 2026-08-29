@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import quote
 
@@ -76,6 +78,61 @@ async def test_retry_passes_failed_download_id(mock_dqueue):
     resp = await main.retry(req)
     assert resp.status == 200
     mock_dqueue.retry.assert_awaited_once_with("https://example.com/watch?v=1")
+
+
+@pytest.mark.asyncio
+async def test_report_problem_returns_notification_status(monkeypatch):
+    notify = AsyncMock(return_value=(True, "Problem report sent."))
+    monkeypatch.setattr(main.pushover, "notify_manual_report", notify)
+
+    resp = await main.report_problem(MagicMock(spec=web.Request))
+
+    assert resp.status == 200
+    assert json.loads(resp.text) == {
+        "status": "ok",
+        "msg": "Problem report sent.",
+    }
+    notify.assert_awaited_once_with(
+        app_version=os.getenv("METUBE_VERSION", "dev"),
+        yt_dlp_version=main.yt_dlp_version,
+    )
+
+
+@pytest.mark.asyncio
+async def test_report_problem_returns_503_when_notification_fails(monkeypatch):
+    monkeypatch.setattr(
+        main.pushover,
+        "notify_manual_report",
+        AsyncMock(return_value=(False, "Problem reporting is not configured.")),
+    )
+
+    resp = await main.report_problem(MagicMock(spec=web.Request))
+
+    assert resp.status == 503
+    assert json.loads(resp.text)["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_failed_download_schedules_pushover_notification(monkeypatch):
+    emit = AsyncMock()
+    notify = AsyncMock(return_value=(True, "sent"))
+    tasks = []
+
+    def capture_task(coro, *, name=None):
+        task = asyncio.create_task(coro, name=name)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(main.sio, "emit", emit)
+    monkeypatch.setattr(main.pushover, "notify_download_failure", notify)
+    monkeypatch.setattr(main.bg_tasks, "create_task", capture_task)
+    download = SimpleNamespace(title="Broken track", status="error", url="private")
+
+    await main.Notifier().completed(download)
+    await asyncio.gather(*tasks)
+
+    emit.assert_awaited_once()
+    notify.assert_awaited_once_with(download)
 
 
 @pytest.mark.asyncio

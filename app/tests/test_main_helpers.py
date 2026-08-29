@@ -85,6 +85,8 @@ class FrontendSafeTests(unittest.TestCase):
             self.assertIn(key, safe)
         self.assertNotIn("YTDL_OPTIONS", safe)
         self.assertNotIn("DOWNLOAD_DIR", safe)
+        self.assertNotIn("PUSHOVER_APP_TOKEN", safe)
+        self.assertNotIn("PUSHOVER_USER_KEY", safe)
         self.assertIn("ALLOW_YTDL_OPTIONS_OVERRIDES", safe)
 
 

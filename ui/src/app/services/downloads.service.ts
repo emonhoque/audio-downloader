@@ -169,6 +169,12 @@ export class DownloadsService {
     );
   }
 
+  public reportProblem() {
+    return this.http.post<Status>('report-problem', {}).pipe(
+      catchError(this.handleHTTPError)
+    );
+  }
+
   public startById(ids: string[]) {
     return this.http.post<Status>('start', {ids: ids}).pipe(
       catchError(this.handleHTTPError)

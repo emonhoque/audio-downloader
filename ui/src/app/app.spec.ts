@@ -19,6 +19,7 @@ class DownloadsServiceStub {
   ytdlOptionsChanged = new Subject<Record<string, unknown>>();
   updated = new Subject<void>();
   retryCalls: string[] = [];
+  reportProblemCalls = 0;
 
   getCookieStatus() {
     return of({ status: 'ok', has_cookies: false });
@@ -35,6 +36,11 @@ class DownloadsServiceStub {
   retry(id: string) {
     this.retryCalls.push(id);
     return of({ status: 'ok' as const });
+  }
+
+  reportProblem() {
+    this.reportProblemCalls++;
+    return of({ status: 'ok' as const, msg: 'Problem report sent.' });
   }
 
   cancelAdd() {
@@ -151,6 +157,18 @@ describe('App', () => {
     expect(root.querySelector('input[name="titleRegex"]')).toBeNull();
     expect(root.querySelector('input[name="skipSubscriberOnly"]')).toBeNull();
     expect(root.querySelector('.github-link')).toBeNull();
+  });
+
+  it('shows the private problem-report button and sends one report', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.problem-report-button') as HTMLButtonElement;
+    expect(button.textContent).toContain("Something's broken");
+    button.click();
+
+    expect(downloads.reportProblemCalls).toBe(1);
+    expect(fixture.componentInstance.reportProblemInProgress).toBe(false);
   });
 
   it('pre-fills the download folder from DEFAULT_FOLDER', () => {

@@ -122,6 +122,14 @@ describe('DownloadsService', () => {
     req.flush({ status: 'ok' });
   });
 
+  it('reportProblem() posts an empty body to the private alert endpoint', () => {
+    service.reportProblem().subscribe();
+    const req = httpMock.expectOne('report-problem');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    req.flush({ status: 'ok', msg: 'Problem report sent.' });
+  });
+
   it('cancelAdd posts to cancel-add', () => {
     service.cancelAdd().subscribe();
     const req = httpMock.expectOne('cancel-add');

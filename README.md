@@ -124,6 +124,34 @@ disabled; the application itself still runs as the configured non-root user.
 Inspect versions in the startup log, with `docker exec metube-audio yt-dlp --version`,
 or through the JSON endpoint at `http://localhost:8081/version`.
 
+## Private Pushover Failure Alerts
+
+This private fork can notify its administrator through Pushover. Create an application
+token in Pushover, then provide that token and the destination user or group key only as
+server-side environment variables:
+
+```yaml
+environment:
+  PUSHOVER_APP_TOKEN: "${PUSHOVER_APP_TOKEN}"
+  PUSHOVER_USER_KEY: "${PUSHOVER_USER_KEY}"
+```
+
+Do not commit either secret. When both values are configured:
+
+- Every failed download is eligible for an automatic alert. Automatic failure alerts
+  share a five-minute cooldown to prevent a site-wide outage from creating a flood.
+- The footer's **Something's broken** button sends a manual alert and has its own
+  one-minute cooldown.
+- Alerts contain the download title and summarized yt-dlp error, but submitted source
+  URLs are removed before the message leaves the server.
+- Pushover timeouts, rejected credentials, and other notification errors are logged and
+  never change the result of a download.
+
+If either environment variable is absent, automatic alerts are disabled and the manual
+button explains that problem reporting is not configured. Because this notifier runs inside the
+application, it cannot report a container that never starts or a host that is offline;
+use an external health monitor for those failures.
+
 ## Docker Usage
 
 Build this fork locally so the image contains this audio-only UI and backend:
@@ -160,6 +188,8 @@ services:
       PUID: "1000"
       PGID: "1000"
       YTDL_NIGHTLY_UPDATE_TIME: "04:00"
+      PUSHOVER_APP_TOKEN: "${PUSHOVER_APP_TOKEN}"
+      PUSHOVER_USER_KEY: "${PUSHOVER_USER_KEY}"
 ```
 
 The image includes Python 3.13, yt-dlp, FFmpeg, the built Angular UI, Deno, aria2,
@@ -182,6 +212,9 @@ Environment variables can be supplied with `docker run -e` or Compose's
   `INFO`.
 - `ENABLE_ACCESSLOG` — enable HTTP access logs; default `false`.
 - `DEFAULT_THEME` — `light`, `dark`, or `auto`; default `auto`.
+- `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY` — optional server-side Pushover
+  credentials for manual and automatic failure alerts. Both are required to enable
+  notifications and are never sent to the browser.
 
 ### Download behavior
 
