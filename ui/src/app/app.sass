@@ -91,6 +91,9 @@
       transform: translateY(-1px)
       box-shadow: 0 13px 26px rgba(79, 70, 229, 0.32)
 
+  > .row.mb-3.g-3:has(.advanced-toggle)
+    display: none
+
 .option-field
   label
     display: block
@@ -106,6 +109,9 @@
     padding-left: 0.95rem
     background-color: color-mix(in srgb, var(--bs-body-bg) 86%, var(--bs-tertiary-bg) 14%)
     border-radius: 0.8rem
+
+#advancedOptions
+  display: none !important
 
 .advanced-toggle
   display: inline-flex
