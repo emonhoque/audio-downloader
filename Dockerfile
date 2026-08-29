@@ -2,7 +2,11 @@
 # has lagged behind and resolved to a Node patch older than the Angular CLI's
 # minimum supported version, breaking the build. node:22-alpine currently
 # satisfies @angular/cli's >=22.22.3 requirement.
-FROM node:22-alpine AS builder
+#
+# The frontend output is architecture-neutral static content. Build it on the
+# native Buildx worker instead of under QEMU for each target architecture;
+# Node/V8 can otherwise SIGILL during the emulated arm64 Angular build.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /metube
 COPY ui ./
