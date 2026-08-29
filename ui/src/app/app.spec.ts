@@ -319,6 +319,10 @@ describe('App', () => {
 
     const row = (fixture.nativeElement as HTMLElement).querySelector('tbody tr');
     expect(row?.textContent).toContain('FLAC');
+    expect(row?.classList.contains('mobile-card-row')).toBe(true);
+    expect(row?.querySelector('[data-label="Format"]')?.textContent).toContain('FLAC');
+    expect(row?.querySelector('[data-label="Speed"]')).not.toBeNull();
+    expect(row?.querySelector('[data-label="ETA"]')).not.toBeNull();
   });
 
   it('labels formats the way the form does, and copes with an unknown one', () => {

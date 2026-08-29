@@ -452,31 +452,238 @@ main
   .navbar
     min-height: 3.8rem
 
+    .container
+      padding-inline: 0.85rem
+
+  .navbar-brand
+    font-size: 0.95rem
+
+  .brand-mark
+    width: 2.1rem
+    height: 2.1rem
+
   .download-metrics
     display: none
 
+  main.container
+    --bs-gutter-x: 1.25rem
+
   .add-url-box
-    margin: 1.25rem auto 1.5rem
-    border-radius: 1.15rem
+    margin: 0.85rem auto 1.1rem
+    padding: 1rem
+    border-radius: 1rem
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.09)
+
+    > .row:first-of-type
+      margin-bottom: 1rem !important
 
     .form-control.form-control-lg
-      min-height: 3.25rem
+      min-height: 3.15rem
+      padding-inline: 0.9rem
       border-radius: 0.8rem
+      font-size: 0.95rem
+
+    .vstack > .btn-group
+      gap: 0.5rem
 
     .btn-group .btn
+      min-height: 3rem
       border-radius: 0.8rem
 
+    .btn-primary
+      width: 100%
+      min-width: 0
+
+  .option-field
+    label
+      margin-bottom: 0.35rem
+
+    .form-select
+      min-height: 3rem
+
+  .advanced-toggle
+    min-height: 2.75rem
+    padding-inline: 0.8rem
+
+  #advancedOptions
+    .settings-section-label
+      margin-top: 1.35rem
+
+    .input-group
+      display: grid
+      grid-template-columns: minmax(0, 1fr)
+
+      > .input-group-text
+        width: 100%
+        padding: 0.45rem 0.7rem
+        border-radius: 0.7rem 0.7rem 0 0
+        font-size: 0.75rem
+
+      > .form-control, > .form-select, > ng-select
+        width: 100%
+        min-height: 2.8rem
+        border-radius: 0 0 0.7rem 0.7rem
+
+    .row.g-2 > .col-auto
+      flex: 0 0 100%
+      width: 100%
+
+    .form-check
+      min-height: 2.75rem
+      padding-top: 0.5rem
+      padding-bottom: 0.5rem
+
+    .action-group-label
+      margin-top: 0.25rem
+
+    .btn:not(.btn-close)
+      min-height: 2.8rem
+
   .download-section
+    margin-bottom: 0.85rem
     border-radius: 1rem
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.055)
 
   .metube-section-toggle
+    min-height: 3.6rem
     padding: 1rem
 
   .section-actions
-    padding: 0.6rem 0.7rem
+    flex-wrap: wrap
+    gap: 0.4rem
+    padding: 0.55rem 0.65rem
+
+  .action-button
+    min-height: 2.75rem
+    flex: 1 1 auto
+    justify-content: center
+    padding-inline: 0.7rem
+    white-space: nowrap
 
   .table-shell
-    padding-inline: 0.55rem
+    padding: 0.65rem
+    overflow: visible !important
+
+  .modern-table
+    display: block
+
+    thead
+      display: none
+
+    tbody
+      display: grid
+      gap: 0.65rem
+
+    tr.mobile-card-row
+      position: relative
+      display: grid
+      grid-template-columns: repeat(2, minmax(0, 1fr))
+      gap: 0.2rem 0.85rem
+      padding: 0.8rem
+      background: color-mix(in srgb, var(--bs-body-bg) 84%, var(--bs-tertiary-bg) 16%)
+      border: 1px solid var(--bs-border-color)
+      border-radius: 0.85rem
+
+      &:hover
+        background: color-mix(in srgb, var(--bs-body-bg) 84%, var(--bs-tertiary-bg) 16%)
+
+      > td
+        display: flex
+        align-items: center
+        min-width: 0
+        padding: 0.35rem 0 !important
+        border: 0
+
+      > td[data-label]
+        flex-direction: column
+        align-items: flex-start
+        gap: 0.1rem
+        font-size: 0.84rem
+
+        &::before
+          content: attr(data-label)
+          color: var(--bs-secondary-color)
+          font-size: 0.65rem
+          font-weight: 700
+          letter-spacing: 0.06em
+          text-transform: uppercase
+
+    .mobile-card-select
+      position: absolute
+      top: 0.75rem
+      right: 0.75rem
+      z-index: 1
+
+    .mobile-card-primary
+      grid-column: 1 / -1
+      padding-right: 2rem !important
+      overflow-wrap: anywhere
+
+      > .d-flex
+        width: 100%
+        align-items: flex-start !important
+
+      .download-progressbar
+        width: 100%
+        margin: 0.35rem 0 0
+
+    .mobile-card-actions
+      grid-column: 1 / -1
+      justify-content: flex-end
+      margin-top: 0.35rem
+      padding-top: 0.55rem !important
+      border-top: 1px solid var(--bs-border-color)
+
+      .btn
+        display: inline-flex
+        align-items: center
+        justify-content: center
+        min-width: 2.75rem
+        min-height: 2.75rem
+        padding: 0.5rem
+        border-radius: 0.7rem
+
+    .empty-row
+      display: block
+
+      > td
+        display: block
+        padding: 0 !important
+        border: 0
+
+    .chapter-row
+      grid-template-columns: minmax(0, 1fr) auto
+      margin-left: 0.75rem
+
+      > td
+        display: none !important
+
+      > td:nth-child(2), > td:last-child
+        display: flex !important
+
+      > td:nth-child(2)
+        min-width: 0
+
+      > td:last-child
+        justify-content: flex-end
+
+  .empty-state
+    min-height: 5.5rem
+    padding: 0.75rem
+    text-align: left
+
+  .modal-dialog
+    margin: 0.5rem
+
+  .modal-content
+    border-radius: 1rem
 
   .footer .footer-content
+    flex-direction: column
     gap: 0.7rem
+
+    .version-separator
+      display: none
+
+  .footer
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom))

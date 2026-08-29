@@ -395,7 +395,7 @@
                 <div class="col-md-8">
                   <div class="action-group-label">Bulk Actions</div>
                   <div class="row g-2">
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <button type="button"
                         class="btn btn-secondary w-100"
                         (click)="openBatchImportModal()">
@@ -403,7 +403,7 @@
                         Import URLs
                       </button>
                     </div>
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <button type="button"
                         class="btn btn-secondary w-100"
                         (click)="exportBatchUrls('all')">
@@ -411,7 +411,7 @@
                         Export URLs
                       </button>
                     </div>
-                    <div class="col-4">
+                    <div class="col-12 col-sm-4">
                       <button type="button"
                         class="btn btn-secondary w-100"
                         (click)="copyBatchUrls('all')">
@@ -528,11 +528,11 @@
             </tr>
           }
           @for (download of downloads.queue | keyvalue: asIsOrder; track download.key) {
-            <tr [class.disabled]='download.value.deleting'>
-              <td>
+            <tr class="mobile-card-row" [class.disabled]='download.value.deleting'>
+              <td class="mobile-card-select">
                 <app-item-checkbox [id]="download.key" [master]="queueMasterCheckboxRef" [checkable]="download.value" />
               </td>
-              <td title="{{ download.value.filename }}">
+              <td class="mobile-card-primary" title="{{ download.value.filename }}">
                 <div class="d-flex flex-column flex-sm-row align-items-center row-gap-2 column-gap-3">
                   <div class="d-flex align-items-center flex-wrap gap-2">
                     <span>{{ download.value.title }}</span>
@@ -558,10 +558,10 @@
                   }
                 </div>
               </td>
-              <td class="text-nowrap">{{ formatLabel(download.value) }}</td>
-              <td>{{ download.value.speed | speed }}</td>
-              <td>{{ download.value.eta | eta }}</td>
-              <td>
+              <td class="text-nowrap" data-label="Format">{{ formatLabel(download.value) }}</td>
+              <td data-label="Speed">{{ download.value.speed | speed }}</td>
+              <td data-label="ETA">{{ download.value.eta | eta }}</td>
+              <td class="mobile-card-actions">
                 <div class="d-flex">
                   @if (download.value.status === 'pending' || download.value.status === 'scheduled') {
                     <button type="button" class="btn btn-link" [attr.aria-label]="'Start download for ' + download.value.title" (click)="downloadItemByKey(download.key)"><fa-icon [icon]="faDownload" /></button>
@@ -626,11 +626,11 @@
             </tr>
           }
           @for (entry of cachedSortedDone; track entry[0]) {
-            <tr [class.disabled]='entry[1].deleting'>
-              <td>
+            <tr class="mobile-card-row" [class.disabled]='entry[1].deleting'>
+              <td class="mobile-card-select">
                 <app-item-checkbox [id]="entry[0]" [master]="doneMasterCheckboxRef" [checkable]="entry[1]" />
               </td>
-              <td>
+              <td class="mobile-card-primary">
                 <div style="display: inline-block; width: 1.5rem;">
                   @if (entry[1].status === 'finished') {
                     <fa-icon [icon]="faCheckCircle" class="text-success" />
@@ -685,23 +685,23 @@
                   </div>
                 }
               </td>
-              <td class="text-nowrap">
+              <td class="text-nowrap" data-label="Quality">
                 {{ formatQualityLabel(entry[1]) }}
               </td>
-              <td class="text-nowrap">
+              <td class="text-nowrap" data-label="Format">
                 {{ formatCodecLabel(entry[1]) }}
               </td>
-              <td>
+              <td data-label="Size">
                 @if (entry[1].size) {
                   <span>{{ entry[1].size | fileSize }}</span>
                 }
               </td>
-              <td class="text-nowrap">
+              <td class="text-nowrap" data-label="Downloaded">
                 @if (entry[1].timestamp) {
                   <span>{{ entry[1].timestamp / 1000000 | date:'yyyy-MM-dd HH:mm' }}</span>
                 }
               </td>
-              <td>
+              <td class="mobile-card-actions">
                 <div class="d-flex">
                   @if (entry[1].status === 'error') {
                     <button type="button" class="btn btn-link" [attr.aria-label]="'Retry download for ' + entry[1].title" (click)="retryDownload(entry[0], entry[1])"><fa-icon [icon]="faRedoAlt" /></button>
@@ -719,7 +719,7 @@
             </tr>
           @if (entry[1].chapter_files && entry[1].chapter_files.length > 0) {
             @for (chapterFile of entry[1].chapter_files; track chapterFile.filename) {
-              <tr [class.disabled]='entry[1].deleting'>
+              <tr class="mobile-card-row chapter-row" [class.disabled]='entry[1].deleting'>
                 <td></td>
                 <td>
                   <div style="padding-left: 2rem;">
