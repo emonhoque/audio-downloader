@@ -8,8 +8,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 export interface AddDownloadPayload {
   url: string;
-  downloadType: string;
-  codec: string;
   quality: string;
   format: string;
   folder: string;
@@ -19,8 +17,6 @@ export interface AddDownloadPayload {
   splitByChapters: boolean;
   sponsorblock: boolean;
   chapterTemplate: string;
-  subtitleLanguage: string;
-  subtitleMode: string;
   ytdlOptionsPresets: string[];
   ytdlOptionsOverrides: string;
   clipStart?: string;
@@ -140,8 +136,6 @@ export class DownloadsService {
   public add(payload: AddDownloadPayload) {
     const body: Record<string, unknown> = {
       url: payload.url,
-      download_type: payload.downloadType,
-      codec: payload.codec,
       quality: payload.quality,
       format: payload.format,
       folder: payload.folder,
@@ -151,8 +145,6 @@ export class DownloadsService {
       split_by_chapters: payload.splitByChapters,
       sponsorblock: payload.sponsorblock,
       chapter_template: payload.chapterTemplate,
-      subtitle_language: payload.subtitleLanguage,
-      subtitle_mode: payload.subtitleMode,
       ytdl_options_presets: payload.ytdlOptionsPresets,
       ytdl_options_overrides: payload.ytdlOptionsOverrides,
     };

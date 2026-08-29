@@ -133,14 +133,16 @@ async def test_add_invalid_download_type(mock_dqueue):
 
 
 @pytest.mark.asyncio
-async def test_add_invalid_video_quality(mock_dqueue):
-    req = _json_request(_valid_video_add_body(quality="9999"))
+async def test_add_invalid_audio_quality(mock_dqueue):
+    req = _json_request(
+        _valid_video_add_body(download_type="audio", format="mp3", quality="9999")
+    )
     with pytest.raises(web.HTTPBadRequest):
         await main.add(req)
 
 
 @pytest.mark.asyncio
-async def test_add_invalid_subtitle_language(mock_dqueue):
+async def test_add_obsolete_caption_fields_are_ignored_and_forced_to_audio(mock_dqueue):
     req = _json_request(
         {
             "url": "https://example.com/v",
@@ -151,8 +153,10 @@ async def test_add_invalid_subtitle_language(mock_dqueue):
             "subtitle_language": "bad language!",
         }
     )
-    with pytest.raises(web.HTTPBadRequest):
-        await main.add(req)
+    response = await main.add(req)
+    assert response.status == 200
+    call = mock_dqueue.add.await_args
+    assert call.args[1:5] == ("audio", "auto", "mp3", "320")
 
 
 @pytest.mark.asyncio
@@ -425,13 +429,19 @@ async def test_subscribe_explicit_clip_wins_over_t_param(mock_dqueue, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_subscribe_still_rejects_clips_for_non_media(mock_dqueue, monkeypatch):
+async def test_subscribe_legacy_non_media_request_becomes_clipped_audio(mock_dqueue, monkeypatch):
     monkeypatch.setattr(main.submgr, "add_subscription", AsyncMock(return_value={"status": "ok"}))
     body = _valid_video_add_body(clip_start="10")
     body["download_type"] = "thumbnail"
     req = _json_request({**body, "check_interval_minutes": 60})
-    with pytest.raises(web.HTTPBadRequest):
-        await main.subscribe(req)
+    response = await main.subscribe(req)
+    assert response.status == 200
+    kwargs = main.submgr.add_subscription.await_args.kwargs
+    assert kwargs["download_type"] == "audio"
+    assert kwargs["codec"] == "auto"
+    assert kwargs["format"] == "mp3"
+    assert kwargs["quality"] == "320"
+    assert kwargs["clip_start"] == pytest.approx(10.0)
 
 
 @pytest.mark.asyncio

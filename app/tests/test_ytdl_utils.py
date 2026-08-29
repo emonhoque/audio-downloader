@@ -578,7 +578,7 @@ class DownloadResultTests(unittest.TestCase):
 
         with patch.object(download, '_make_youtube_dl', side_effect=make_youtube_dl), \
              patch('ytdl.install_socket_guard'), \
-             patch('ytdl.os.setpgrp'):
+             patch('ytdl.os.setpgrp', create=True):
             download._download()
 
         return statuses, captured_params
@@ -696,6 +696,24 @@ def _capture_ytdl_params(download: Download) -> dict:
 
 
 class SponsorBlockPostprocessorTests(unittest.TestCase):
+    def test_advanced_options_cannot_restore_video_or_skip_audio_conversion(self):
+        download = _make_test_download()
+        download.ytdl_opts.update({
+            'format': 'bestvideo',
+            'skip_download': True,
+            'keepvideo': True,
+        })
+
+        params = _capture_ytdl_params(download)
+
+        self.assertNotIn('bestvideo', params['format'])
+        self.assertTrue(params['format'].startswith('bestaudio'))
+        self.assertFalse(params['skip_download'])
+        self.assertFalse(params['keepvideo'])
+        extract = next(pp for pp in params['postprocessors'] if pp['key'] == 'FFmpegExtractAudio')
+        self.assertEqual(extract['preferredcodec'], 'mp3')
+        self.assertEqual(extract['preferredquality'], '320')
+
     def test_no_sponsorblock_postprocessors_when_disabled(self):
         download = _make_test_download()
 
@@ -711,8 +729,11 @@ class SponsorBlockPostprocessorTests(unittest.TestCase):
 
         params = _capture_ytdl_params(download)
 
+        sponsor_index = next(
+            i for i, pp in enumerate(params['postprocessors']) if pp['key'] == 'SponsorBlock'
+        )
         self.assertEqual(
-            params['postprocessors'],
+            params['postprocessors'][sponsor_index:sponsor_index + 2],
             [
                 {
                     'key': 'SponsorBlock',
@@ -740,7 +761,8 @@ class SponsorBlockPostprocessorTests(unittest.TestCase):
         params = _capture_ytdl_params(download)
 
         keys = [pp['key'] for pp in params['postprocessors']]
-        self.assertEqual(keys, ['SponsorBlock', 'ModifyChapters', 'FFmpegSplitChapters'])
+        self.assertLess(keys.index('SponsorBlock'), keys.index('ModifyChapters'))
+        self.assertLess(keys.index('ModifyChapters'), keys.index('FFmpegSplitChapters'))
         self.assertEqual(params['outtmpl']['chapter'], '%(section_number)s.%(ext)s')
 
 
@@ -864,8 +886,8 @@ class CancelProcessGroupTests(unittest.TestCase):
         dl.loop = MagicMock()
 
         with patch.object(Download, "running", return_value=True), \
-             patch("ytdl.os.getpgid", return_value=4321) as mock_getpgid, \
-             patch("ytdl.os.killpg") as mock_killpg:
+             patch("ytdl.os.getpgid", return_value=4321, create=True) as mock_getpgid, \
+             patch("ytdl.os.killpg", create=True) as mock_killpg:
             dl.cancel()
 
         mock_getpgid.assert_called_once_with(4321)
@@ -883,8 +905,8 @@ class CancelProcessGroupTests(unittest.TestCase):
         dl.loop = MagicMock()
 
         with patch.object(Download, "running", return_value=True), \
-             patch("ytdl.os.getpgid", return_value=999), \
-             patch("ytdl.os.killpg") as mock_killpg, \
+             patch("ytdl.os.getpgid", return_value=999, create=True), \
+             patch("ytdl.os.killpg", create=True) as mock_killpg, \
              patch("ytdl.os.kill") as mock_kill:
             dl.cancel()
 
@@ -900,7 +922,7 @@ class CancelProcessGroupTests(unittest.TestCase):
         dl.loop = MagicMock()
 
         with patch.object(Download, "running", return_value=True), \
-             patch("ytdl.os.getpgid", side_effect=OSError("no such process")), \
+             patch("ytdl.os.getpgid", side_effect=OSError("no such process"), create=True), \
              patch("ytdl.os.kill") as mock_kill:
             dl.cancel()
 
@@ -918,7 +940,7 @@ class CancelProcessGroupTests(unittest.TestCase):
         dl.loop = MagicMock()
 
         with patch.object(Download, "running", return_value=True), \
-             patch("ytdl.os.getpgid", side_effect=OSError("no such process")), \
+             patch("ytdl.os.getpgid", side_effect=OSError("no such process"), create=True), \
              patch("ytdl.os.kill", side_effect=ProcessLookupError()):
             dl.cancel()
 
@@ -936,14 +958,14 @@ class CancelProcessGroupTests(unittest.TestCase):
         self.assertIsNone(dl.loop)
 
         with patch.object(Download, "running", side_effect=[True, True]), \
-             patch("ytdl.os.getpgid", return_value=4321), \
-             patch("ytdl.os.killpg") as mock_killpg:
+             patch("ytdl.os.getpgid", return_value=4321, create=True), \
+             patch("ytdl.os.killpg", create=True) as mock_killpg:
             dl.cancel()
 
         # First SIGINT, then _kill_if_alive() ran inline and sent SIGKILL.
         mock_killpg.assert_has_calls([
             unittest.mock.call(4321, signal.SIGINT),
-            unittest.mock.call(4321, signal.SIGKILL),
+            unittest.mock.call(4321, getattr(signal, 'SIGKILL', signal.SIGTERM)),
         ])
         self.assertTrue(dl.canceled)
 
@@ -954,18 +976,18 @@ class KillIfAliveTests(unittest.TestCase):
         dl.proc = types.SimpleNamespace(pid=4321)
 
         with patch.object(Download, "running", return_value=True), \
-             patch("ytdl.os.getpgid", return_value=4321), \
-             patch("ytdl.os.killpg") as mock_killpg:
+             patch("ytdl.os.getpgid", return_value=4321, create=True), \
+             patch("ytdl.os.killpg", create=True) as mock_killpg:
             dl._kill_if_alive()
 
-        mock_killpg.assert_called_once_with(4321, signal.SIGKILL)
+        mock_killpg.assert_called_once_with(4321, getattr(signal, 'SIGKILL', signal.SIGTERM))
 
     def test_kill_if_alive_noop_when_process_already_exited(self):
         dl = _make_test_download()
         dl.proc = types.SimpleNamespace(pid=4321)
 
         with patch.object(Download, "running", return_value=False), \
-             patch("ytdl.os.killpg") as mock_killpg, \
+             patch("ytdl.os.killpg", create=True) as mock_killpg, \
              patch("ytdl.os.kill") as mock_kill:
             dl._kill_if_alive()
 
@@ -1124,7 +1146,8 @@ class DownloadInfoSetstateTests(unittest.TestCase):
         di = DownloadInfo.__new__(DownloadInfo)
         di.__setstate__(state)
         self.assertEqual(di.download_type, "audio")
-        self.assertEqual(di.format, "m4a")
+        self.assertEqual(di.format, "mp3")
+        self.assertEqual(di.quality, "320")
 
     def test_new_state_has_subtitle_files(self):
         state = self._base_state(

@@ -41,7 +41,7 @@ export class BatchUrlsService {
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = 'metube_urls.txt';
+    a.download = 'audio-downloader-urls.txt';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

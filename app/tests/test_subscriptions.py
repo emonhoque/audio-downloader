@@ -185,14 +185,49 @@ class SubscriptionPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             mgr = SubscriptionManager(cfg, _Queue(), _Notifier())
-            self.assertEqual(mgr.list_all()[0].seen_ids, ["a", "b"])
+            loaded = mgr.list_all()[0]
+            self.assertEqual(loaded.seen_ids, ["a", "b"])
+            self.assertEqual(loaded.download_type, "audio")
+            self.assertEqual(loaded.format, "mp3")
+            self.assertEqual(loaded.quality, "320")
 
             with open(json_path, encoding="utf-8") as f:
                 payload = json.load(f)
 
             self.assertEqual(payload["schema_version"], 2)
             self.assertEqual(payload["items"][0]["seen_ids"], ["a", "b"])
+            self.assertEqual(payload["items"][0]["download_type"], "audio")
+            self.assertEqual(payload["items"][0]["format"], "mp3")
+            self.assertEqual(payload["items"][0]["quality"], "320")
             self.assertNotIn("timestamp", payload["items"][0])
+
+    def test_legacy_explicit_audio_format_is_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            json_path = os.path.join(tmp, "subscriptions.json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "schema_version": 1,
+                        "kind": "subscriptions",
+                        "items": [
+                            {
+                                "id": "sub-1",
+                                "name": "Audio channel",
+                                "url": "https://example.com/channel",
+                                "download_type": "audio",
+                                "format": "opus",
+                                "quality": "best",
+                            }
+                        ],
+                    },
+                    f,
+                )
+
+            mgr = SubscriptionManager(_Config(tmp), _Queue(), _Notifier())
+            loaded = mgr.get("sub-1")
+            self.assertEqual(loaded.download_type, "audio")
+            self.assertEqual(loaded.format, "opus")
+            self.assertEqual(loaded.quality, "best")
 
     async def test_add_subscription_rolls_back_when_state_write_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -407,7 +442,46 @@ class SubscriptionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(sub.last_checked)
             self.assertIsNone(sub.error)
             self.assertEqual(sub.seen_ids[:2], ["v2", "v1"])
+            self.assertEqual(sub.download_type, "audio")
+            self.assertEqual(sub.format, "mp3")
+            self.assertEqual(sub.quality, "320")
             self.assertEqual([entry["webpage_url"] for entry, _, _ in queue.entries], ["https://example.com/v2"])
+            _entry, args, _kwargs = queue.entries[0]
+            self.assertEqual(args[:4], ("audio", "auto", "mp3", "320"))
+
+    async def test_explicit_audio_format_persists_across_reload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = _Config(tmp)
+            with patch(
+                "subscriptions.extract_flat_playlist",
+                return_value=(
+                    {"_type": "channel", "title": "Channel"},
+                    [{"id": "v1", "title": "One", "webpage_url": "https://example.com/v1"}],
+                ),
+            ):
+                mgr = SubscriptionManager(cfg, _Queue(), _Notifier())
+                result = await mgr.add_subscription(
+                    "https://example.com/channel",
+                    check_interval_minutes=60,
+                    download_type="audio",
+                    codec="auto",
+                    format="flac",
+                    quality="best",
+                    folder="",
+                    custom_name_prefix="",
+                    auto_start=True,
+                    playlist_item_limit=0,
+                    split_by_chapters=False,
+                    chapter_template="",
+                    subtitle_language="en",
+                    subtitle_mode="prefer_manual",
+                )
+
+            sub_id = result["subscription"]["id"]
+            reloaded = SubscriptionManager(cfg, _Queue(), _Notifier()).get(sub_id)
+            self.assertEqual(reloaded.download_type, "audio")
+            self.assertEqual(reloaded.format, "flac")
+            self.assertEqual(reloaded.quality, "best")
 
     async def test_check_now_applies_subscription_clip_bounds(self):
         """Issue #1049: clip bounds were the one download option a subscription

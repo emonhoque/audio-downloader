@@ -4,7 +4,6 @@ export interface Download {
   title: string;
   url: string;
   download_type: string;
-  codec?: string;
   quality: string;
   format: string;
   folder: string;
@@ -13,8 +12,6 @@ export interface Download {
   split_by_chapters?: boolean;
   sponsorblock?: boolean;
   chapter_template?: string;
-  subtitle_language?: string;
-  subtitle_mode?: string;
   ytdl_options_presets?: string[];
   ytdl_options_overrides?: Record<string, unknown>;
   clip_start?: number;

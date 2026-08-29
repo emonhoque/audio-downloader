@@ -27,10 +27,8 @@ class MeTubeSocketStub {
 function basePayload(): AddDownloadPayload {
   return {
     url: 'https://example.com/v',
-    downloadType: 'video',
-    codec: 'auto',
-    quality: 'best',
-    format: 'any',
+    quality: '320',
+    format: 'mp3',
     folder: '',
     customNamePrefix: '',
     playlistItemLimit: 0,
@@ -38,8 +36,6 @@ function basePayload(): AddDownloadPayload {
     splitByChapters: false,
     sponsorblock: false,
     chapterTemplate: '',
-    subtitleLanguage: 'en',
-    subtitleMode: 'prefer_manual',
     ytdlOptionsPresets: [],
     ytdlOptionsOverrides: '',
     clipStart: '',
@@ -74,20 +70,20 @@ describe('DownloadsService', () => {
     expect(req.request.body).toEqual(
       expect.objectContaining({
         url: 'https://example.com/v',
-        download_type: 'video',
-        codec: 'auto',
-        quality: 'best',
-        format: 'any',
+        quality: '320',
+        format: 'mp3',
         playlist_item_limit: 0,
         auto_start: true,
         split_by_chapters: false,
         chapter_template: '',
-        subtitle_language: 'en',
-        subtitle_mode: 'prefer_manual',
         ytdl_options_presets: [],
         ytdl_options_overrides: '',
       }),
     );
+    expect(req.request.body['download_type']).toBeUndefined();
+    expect(req.request.body['codec']).toBeUndefined();
+    expect(req.request.body['subtitle_language']).toBeUndefined();
+    expect(req.request.body['subtitle_mode']).toBeUndefined();
     req.flush({ status: 'ok' });
   });
 

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Audio Downloader">
+  <rect width="64" height="64" rx="12" fill="#0d6efd" />
+  <path fill="#fff" d="M38 13v28.6a9 9 0 1 1-5-8V18.4l17-3.8V35.6a9 9 0 1 1-5-8V13z" />
+</svg>

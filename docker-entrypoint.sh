@@ -3,6 +3,8 @@
 PUID="${UID:-$PUID}"
 PGID="${GID:-$PGID}"
 AUDIO_DOWNLOAD_DIR="${AUDIO_DOWNLOAD_DIR:-$DOWNLOAD_DIR}"
+YTDL_NIGHTLY_UPDATE_TIME="${YTDL_NIGHTLY_UPDATE_TIME-04:00}"
+export YTDL_NIGHTLY_UPDATE_TIME
 
 echo "Setting umask to ${UMASK}"
 umask ${UMASK}
@@ -10,7 +12,8 @@ echo "Creating download directory (${DOWNLOAD_DIR}), audio download directory ($
 mkdir -p "${DOWNLOAD_DIR}" "${AUDIO_DOWNLOAD_DIR}" "${STATE_DIR}" "${TEMP_DIR}"
 
 do_upgrade() {
-    echo "Upgrading yt-dlp to nightly channel..."
+    before_version="$(python3 -c 'from yt_dlp.version import __version__; print(__version__)' 2>/dev/null || echo unknown)"
+    echo "Starting yt-dlp nightly update check (installed: ${before_version})"
     if ! python3 -m pip --version >/dev/null 2>&1; then
         echo "pip not found; attempting ensurepip"
         python3 -m ensurepip --upgrade >/dev/null 2>&1 || true
@@ -19,7 +22,12 @@ do_upgrade() {
         echo "Warning: yt-dlp nightly upgrade failed; continuing with existing installation"
         return 1
     fi
-    echo "yt-dlp nightly upgrade complete"
+    after_version="$(python3 -c 'from yt_dlp.version import __version__; print(__version__)' 2>/dev/null || echo unknown)"
+    if [ "${before_version}" = "${after_version}" ]; then
+        echo "yt-dlp nightly is already current (${after_version})"
+    else
+        echo "yt-dlp nightly updated: ${before_version} -> ${after_version}"
+    fi
     return 0
 }
 
@@ -47,9 +55,12 @@ nightly_enabled() {
 disable_nightly_for_non_root() {
     if nightly_enabled; then
         echo "YTDL_NIGHTLY_UPDATE_TIME is set but this container runs as a non-root user; nightly yt-dlp updates are not supported. Ignoring YTDL_NIGHTLY_UPDATE_TIME."
-        unset YTDL_NIGHTLY_UPDATE_TIME
+        YTDL_NIGHTLY_UPDATE_TIME=""
+        export YTDL_NIGHTLY_UPDATE_TIME
     fi
 }
+
+echo "Installed yt-dlp version: $(python3 -c 'from yt_dlp.version import __version__; print(__version__)' 2>/dev/null || echo unknown)"
 
 if [ `id -u` -eq 0 ] && [ `id -g` -eq 0 ]; then
     if [ "${PUID}" -eq 0 ]; then

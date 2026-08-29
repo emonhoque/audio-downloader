@@ -83,8 +83,6 @@ export class SubscriptionsService {
   subscribe(payload: SubscribePayload) {
     const body: Record<string, unknown> = {
       url: payload.url,
-      download_type: payload.downloadType,
-      codec: payload.codec,
       quality: payload.quality,
       format: payload.format,
       folder: payload.folder,
@@ -94,8 +92,6 @@ export class SubscriptionsService {
       split_by_chapters: payload.splitByChapters,
       sponsorblock: payload.sponsorblock,
       chapter_template: payload.chapterTemplate,
-      subtitle_language: payload.subtitleLanguage,
-      subtitle_mode: payload.subtitleMode,
       ytdl_options_presets: payload.ytdlOptionsPresets,
       ytdl_options_overrides: payload.ytdlOptionsOverrides,
       check_interval_minutes: payload.checkIntervalMinutes,

@@ -68,6 +68,7 @@ ENV DOWNLOAD_DIR=/downloads
 ENV STATE_DIR=/downloads/.metube
 ENV TEMP_DIR=/downloads
 ENV PORT=8081
+ENV YTDL_NIGHTLY_UPDATE_TIME=04:00
 VOLUME /downloads
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

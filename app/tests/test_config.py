@@ -188,13 +188,15 @@ class ConfigTests(unittest.TestCase):
             c = Config()
         self.assertTrue(c.ALLOW_YTDL_OPTIONS_OVERRIDES)
 
-    def test_ytdl_nightly_update_time_empty_default(self):
+    def test_ytdl_nightly_update_time_can_be_explicitly_disabled(self):
         with patch.dict(os.environ, _base_env(YTDL_NIGHTLY_UPDATE_TIME=""), clear=False):
             c = Config()
         self.assertEqual(c.YTDL_NIGHTLY_UPDATE_TIME, "")
 
-    def test_ytdl_nightly_update_time_valid(self):
-        with patch.dict(os.environ, _base_env(YTDL_NIGHTLY_UPDATE_TIME="04:00"), clear=False):
+    def test_ytdl_nightly_update_time_defaults_to_04_00(self):
+        env = _base_env()
+        env.pop("YTDL_NIGHTLY_UPDATE_TIME")
+        with patch.dict(os.environ, env, clear=True):
             c = Config()
         self.assertEqual(c.YTDL_NIGHTLY_UPDATE_TIME, "04:00")
 

@@ -1,4 +1,4 @@
-"""Tests for ``app.dl_formats`` format selectors and yt-dlp option mapping."""
+"""Tests for the audio-only yt-dlp format and option contract."""
 
 from __future__ import annotations
 
@@ -6,158 +6,130 @@ import copy
 import unittest
 
 from app.dl_formats import (
-    _normalize_caption_mode,
-    _normalize_subtitle_language,
+    AUDIO_FORMATS,
+    DEFAULT_AUDIO_FORMAT,
+    DEFAULT_MP3_QUALITY,
+    coerce_legacy_audio_request,
     get_format,
     get_opts,
     merge_ytdl_option_layers,
+    normalize_audio_request,
 )
 
 
-class DlFormatsTests(unittest.TestCase):
-    def test_audio_unknown_format_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            get_format("audio", "auto", "invalid", "best")
+class AudioNormalizationTests(unittest.TestCase):
+    def test_missing_fields_default_to_mp3_320(self):
+        self.assertEqual(
+            normalize_audio_request(None, None, None),
+            ("audio", "auto", DEFAULT_AUDIO_FORMAT, DEFAULT_MP3_QUALITY),
+        )
 
-    def test_wav_does_not_enable_thumbnail_postprocessing(self):
+    def test_all_supported_audio_formats_are_preserved(self):
+        for fmt in AUDIO_FORMATS:
+            with self.subTest(fmt=fmt):
+                expected_quality = "320" if fmt == "mp3" else "best"
+                self.assertEqual(
+                    normalize_audio_request("audio", fmt, None),
+                    ("audio", "auto", fmt, expected_quality),
+                )
+
+    def test_explicit_mp3_qualities_are_preserved(self):
+        for quality in ("320", "192", "128", "best"):
+            with self.subTest(quality=quality):
+                self.assertEqual(
+                    normalize_audio_request("audio", "mp3", quality),
+                    ("audio", "auto", "mp3", quality),
+                )
+
+    def test_legacy_media_modes_become_mp3_320(self):
+        for download_type, fmt in (
+            ("video", "mp4"),
+            ("captions", "srt"),
+            ("thumbnail", "jpg"),
+        ):
+            with self.subTest(download_type=download_type):
+                self.assertEqual(
+                    normalize_audio_request(download_type, fmt, "best"),
+                    ("audio", "auto", "mp3", "320"),
+                )
+
+    def test_legacy_schema_preserves_explicit_audio_format(self):
+        self.assertEqual(
+            normalize_audio_request(None, "m4a", "best"),
+            ("audio", "auto", "m4a", "best"),
+        )
+
+    def test_unknown_format_is_rejected_for_new_audio_request(self):
+        with self.assertRaises(ValueError):
+            normalize_audio_request("audio", "aac", "best")
+
+    def test_invalid_quality_is_rejected(self):
+        with self.assertRaises(ValueError):
+            normalize_audio_request("audio", "mp3", "999")
+
+    def test_persisted_invalid_record_is_safely_coerced(self):
+        self.assertEqual(
+            coerce_legacy_audio_request("audio", "invalid", "invalid"),
+            ("audio", "auto", "mp3", "320"),
+        )
+
+
+class DlFormatsTests(unittest.TestCase):
+    def test_source_selector_is_audio_only(self):
+        selector = get_format("audio", "auto", "mp3", "320")
+        self.assertEqual(selector, "bestaudio[ext=mp3]/bestaudio/best")
+        self.assertNotIn("bestvideo", selector)
+
+    def test_legacy_video_selector_is_still_audio_only(self):
+        selector = get_format("video", "h264", "mp4", "1080")
+        self.assertEqual(selector, "bestaudio[ext=mp3]/bestaudio/best")
+
+    def test_all_audio_formats_have_a_source_preference(self):
+        for fmt in AUDIO_FORMATS:
+            with self.subTest(fmt=fmt):
+                self.assertIn(f"ext={fmt}", get_format("audio", "auto", fmt, None))
+
+    def test_mp3_default_conversion_is_320_kbps(self):
+        opts = get_opts("audio", "auto", "mp3", "320", {})
+        extractor = next(p for p in opts["postprocessors"] if p["key"] == "FFmpegExtractAudio")
+        self.assertEqual(extractor["preferredcodec"], "mp3")
+        self.assertEqual(extractor["preferredquality"], "320")
+
+    def test_lossless_and_best_quality_use_ffmpeg_best_setting(self):
+        for fmt in ("m4a", "opus", "flac", "wav"):
+            with self.subTest(fmt=fmt):
+                opts = get_opts("audio", "auto", fmt, "best", {})
+                extractor = next(
+                    p for p in opts["postprocessors"] if p["key"] == "FFmpegExtractAudio"
+                )
+                self.assertEqual(extractor["preferredcodec"], fmt)
+                self.assertEqual(extractor["preferredquality"], 0)
+
+    def test_wav_does_not_request_thumbnail_embedding(self):
         opts = get_opts("audio", "auto", "wav", "best", {})
         self.assertNotIn("writethumbnail", opts)
+        self.assertNotIn("EmbedThumbnail", [p["key"] for p in opts["postprocessors"]])
 
-    def test_mp3_enables_thumbnail_postprocessing(self):
-        opts = get_opts("audio", "auto", "mp3", "best", {})
-        self.assertTrue(opts.get("writethumbnail"))
-
-    def test_custom_format_passthrough(self):
-        self.assertEqual(get_format("video", "auto", "custom:bestvideo+bestaudio", "best"), "bestvideo+bestaudio")
-
-    def test_thumbnail_and_captions_format_strings(self):
-        self.assertEqual(get_format("thumbnail", "auto", "jpg", "best"), "bestaudio/best")
-        self.assertEqual(get_format("captions", "auto", "srt", "best"), "bestaudio/best")
-
-    def test_audio_formats(self):
-        for fmt in ("m4a", "mp3", "opus", "wav", "flac"):
-            with self.subTest(fmt=fmt):
-                self.assertIn(f"ext={fmt}", get_format("audio", "auto", fmt, "best"))
-
-    def test_video_unknown_format_raises(self):
-        with self.assertRaises(ValueError):
-            get_format("video", "auto", "mkv", "best")
-
-    def test_unknown_download_type_raises(self):
-        with self.assertRaises(ValueError):
-            get_format("unknown", "auto", "any", "best")
-
-    def test_video_any_mp4_ios_with_height_quality(self):
-        self.assertIn("height<=1080", get_format("video", "auto", "any", "1080"))
-        self.assertNotIn("height<=", get_format("video", "auto", "any", "best"))
-        self.assertNotIn("height<=", get_format("video", "auto", "any", "worst"))
-
-    def test_video_codec_filters(self):
-        self.assertIn("h264", get_format("video", "h264", "any", "best"))
-        self.assertIn("hevc", get_format("video", "h265", "any", "best"))
-        self.assertIn("av0?1", get_format("video", "av1", "any", "best"))
-        self.assertIn("vp0?9", get_format("video", "vp9", "any", "best"))
-
-    def test_video_mp4_includes_m4a_audio(self):
-        s = get_format("video", "auto", "mp4", "720")
-        self.assertIn("[ext=m4a]", s)
-
-    def test_video_ios_selector_contains_avc_pattern(self):
-        s = get_format("video", "auto", "ios", "best")
-        self.assertIn("h26[45]", s)
+    def test_mp3_requests_metadata_and_thumbnail_embedding(self):
+        opts = get_opts("audio", "auto", "mp3", "320", {})
+        keys = [p["key"] for p in opts["postprocessors"]]
+        self.assertTrue(opts["writethumbnail"])
+        self.assertIn("FFmpegMetadata", keys)
+        self.assertIn("EmbedThumbnail", keys)
 
     def test_get_opts_deepcopy_does_not_mutate_input(self):
         base = {"postprocessors": [{"key": "Existing"}]}
-        orig = copy.deepcopy(base)
-        get_opts("audio", "auto", "mp3", "best", base)
-        self.assertEqual(base, orig)
+        original = copy.deepcopy(base)
+        get_opts("audio", "auto", "mp3", "320", base)
+        self.assertEqual(base, original)
 
-    def test_get_opts_audio_m4a_postprocessors(self):
-        opts = get_opts("audio", "auto", "m4a", "best", {})
-        keys = [p["key"] for p in opts["postprocessors"]]
-        self.assertIn("FFmpegExtractAudio", keys)
-
-    def test_get_opts_audio_mp3_quality_not_best(self):
-        opts = get_opts("audio", "auto", "mp3", "192", {})
-        ext = next(p for p in opts["postprocessors"] if p["key"] == "FFmpegExtractAudio")
-        self.assertEqual(ext["preferredquality"], "192")
-
-    def test_get_opts_thumbnail_skip_download(self):
-        opts = get_opts("thumbnail", "auto", "jpg", "best", {})
-        self.assertTrue(opts.get("skip_download"))
-        self.assertTrue(opts.get("writethumbnail"))
-
-    def test_get_opts_captions_manual_only(self):
+    def test_user_postprocessors_follow_mandatory_audio_conversion(self):
         opts = get_opts(
-            "captions", "auto", "vtt", "best", {}, subtitle_language="fr", subtitle_mode="manual_only"
+            "audio", "auto", "opus", "best", {"postprocessors": [{"key": "SponsorBlock"}]}
         )
-        self.assertTrue(opts.get("writesubtitles"))
-        self.assertFalse(opts.get("writeautomaticsub"))
-        self.assertEqual(opts["subtitleslangs"], ["fr"])
-
-    def test_get_opts_captions_auto_only(self):
-        opts = get_opts(
-            "captions", "auto", "srt", "best", {}, subtitle_language="de", subtitle_mode="auto_only"
-        )
-        self.assertFalse(opts.get("writesubtitles"))
-        self.assertTrue(opts.get("writeautomaticsub"))
-        self.assertEqual(opts["subtitleslangs"], ["de-orig", "de"])
-
-    def test_get_opts_captions_prefer_auto(self):
-        opts = get_opts(
-            "captions", "auto", "srt", "best", {}, subtitle_language="es", subtitle_mode="prefer_auto"
-        )
-        self.assertTrue(opts.get("writesubtitles"))
-        self.assertTrue(opts.get("writeautomaticsub"))
-        self.assertEqual(opts["subtitleslangs"], ["es-orig", "es"])
-
-    def test_get_opts_captions_prefer_manual_default_branch(self):
-        opts = get_opts(
-            "captions", "auto", "srt", "best", {}, subtitle_language="it", subtitle_mode="prefer_manual"
-        )
-        self.assertEqual(opts["subtitleslangs"], ["it", "it-orig"])
-
-    def test_get_opts_captions_txt_maps_to_srt_format(self):
-        opts = get_opts("captions", "auto", "txt", "best", {})
-        self.assertEqual(opts["subtitlesformat"], "srt/best")
         keys = [p["key"] for p in opts["postprocessors"]]
-        self.assertIn("FFmpegSubtitlesConvertor", keys)
-        convertor = next(p for p in opts["postprocessors"] if p["key"] == "FFmpegSubtitlesConvertor")
-        self.assertEqual(convertor["format"], "srt")
-
-    def test_get_opts_captions_srt_guarantees_convertor(self):
-        opts = get_opts("captions", "auto", "srt", "best", {})
-        self.assertEqual(opts["subtitlesformat"], "srt/best")
-        keys = [p["key"] for p in opts["postprocessors"]]
-        self.assertIn("FFmpegSubtitlesConvertor", keys)
-
-    def test_get_opts_captions_vtt_guarantees_convertor(self):
-        opts = get_opts("captions", "auto", "vtt", "best", {})
-        self.assertEqual(opts["subtitlesformat"], "vtt/best")
-        keys = [p["key"] for p in opts["postprocessors"]]
-        self.assertIn("FFmpegSubtitlesConvertor", keys)
-        convertor = next(p for p in opts["postprocessors"] if p["key"] == "FFmpegSubtitlesConvertor")
-        self.assertEqual(convertor["format"], "vtt")
-
-    def test_get_opts_captions_ttml_has_no_convertor(self):
-        opts = get_opts("captions", "auto", "ttml", "best", {})
-        self.assertEqual(opts["subtitlesformat"], "ttml/best")
-        keys = [p["key"] for p in opts["postprocessors"]]
-        self.assertNotIn("FFmpegSubtitlesConvertor", keys)
-
-    def test_get_opts_merges_existing_postprocessors(self):
-        opts = get_opts("audio", "auto", "opus", "best", {"postprocessors": [{"key": "SponsorBlock"}]})
-        keys = [p["key"] for p in opts["postprocessors"]]
+        self.assertEqual(keys[0], "FFmpegExtractAudio")
         self.assertIn("SponsorBlock", keys)
-        self.assertIn("FFmpegExtractAudio", keys)
-
-    def test_normalize_caption_mode_invalid_defaults(self):
-        self.assertEqual(_normalize_caption_mode(""), "prefer_manual")
-        self.assertEqual(_normalize_caption_mode("not_a_mode"), "prefer_manual")
-
-    def test_normalize_subtitle_language_empty_defaults_en(self):
-        self.assertEqual(_normalize_subtitle_language(""), "en")
-        self.assertEqual(_normalize_subtitle_language("  "), "en")
 
 
 class MergeYtdlOptionLayersTests(unittest.TestCase):
@@ -167,11 +139,9 @@ class MergeYtdlOptionLayersTests(unittest.TestCase):
             "b": {"y": 2, "z": 2},
         }
         merged = merge_ytdl_option_layers(["a", "b"], {"z": 3, "w": 4}, presets_config)
-        # b overrides a's y; explicit overrides win over presets.
         self.assertEqual(merged, {"x": 1, "y": 2, "z": 3, "w": 4})
 
     def test_no_base_options_included(self):
-        # The helper only produces the preset/override layer, never base opts.
         self.assertEqual(merge_ytdl_option_layers(None, None, {}), {})
 
     def test_unknown_preset_names_ignored(self):

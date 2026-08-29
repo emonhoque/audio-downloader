@@ -17,7 +17,13 @@ from typing import Any, Optional
 import yt_dlp
 import yt_dlp.networking.impersonate
 import bg_tasks
-from dl_formats import merge_ytdl_option_layers
+from dl_formats import (
+    DEFAULT_AUDIO_FORMAT,
+    DEFAULT_MP3_QUALITY,
+    coerce_legacy_audio_request,
+    merge_ytdl_option_layers,
+    normalize_audio_request,
+)
 from state_store import AtomicJsonStore, read_legacy_shelf
 from url_guard import validate_url
 
@@ -173,10 +179,10 @@ class SubscriptionInfo:
     url: str
     enabled: bool = True
     check_interval_minutes: int = 60
-    download_type: str = "video"
+    download_type: str = "audio"
     codec: str = "auto"
-    format: str = "any"
-    quality: str = "best"
+    format: str = DEFAULT_AUDIO_FORMAT
+    quality: str = DEFAULT_MP3_QUALITY
     folder: str = ""
     custom_name_prefix: str = ""
     auto_start: bool = True
@@ -260,7 +266,7 @@ def _subscription_to_record(sub: SubscriptionInfo) -> dict[str, Any]:
 
 
 def _normalize_subscription_record(rec: dict[str, Any]) -> dict[str, Any]:
-    """Migrate legacy ytdl_options_preset (str) to ytdl_options_presets (list)."""
+    """Migrate legacy fields and make future subscription downloads audio-only."""
     out = dict(rec)
     if "ytdl_options_presets" not in out:
         old = out.pop("ytdl_options_preset", None)
@@ -274,12 +280,32 @@ def _normalize_subscription_record(rec: dict[str, Any]) -> dict[str, Any]:
             out["ytdl_options_presets"] = []
     else:
         out.pop("ytdl_options_preset", None)
+    (
+        out["download_type"],
+        out["codec"],
+        out["format"],
+        out["quality"],
+    ) = coerce_legacy_audio_request(
+        out.get("download_type"),
+        out.get("format"),
+        out.get("quality"),
+    )
     return out
 
 
 def _subscription_from_record(record: Any) -> Optional[SubscriptionInfo]:
     field_names = {f.name for f in fields(SubscriptionInfo)}
     if isinstance(record, SubscriptionInfo):
+        (
+            record.download_type,
+            record.codec,
+            record.format,
+            record.quality,
+        ) = coerce_legacy_audio_request(
+            getattr(record, "download_type", None),
+            getattr(record, "format", None),
+            getattr(record, "quality", None),
+        )
         return record
     if isinstance(record, dict):
         try:
@@ -342,7 +368,7 @@ def validate_subscription_folder(value: Any) -> str:
     folder = value.strip()
     if not folder:
         return ""
-    if os.path.isabs(folder):
+    if os.path.isabs(folder) or folder.startswith(("/", "\\")):
         raise ValueError("folder must be relative to the download directory")
     # Check both separators: the value is stored as typed, and a Windows-style
     # path would otherwise carry an unexamined '..' past this point.
@@ -491,6 +517,9 @@ class SubscriptionManager:
         clip_end: Optional[float] = None,
         sponsorblock: bool = False,
     ) -> tuple[list[str], list[str]]:
+        download_type, codec, format, quality = coerce_legacy_audio_request(
+            download_type, format, quality
+        )
         queued_ids: list[str] = []
         queue_errors: list[str] = []
         presets = list(ytdl_options_presets or [])
@@ -616,6 +645,12 @@ class SubscriptionManager:
         clip_start: Optional[float] = None,
         clip_end: Optional[float] = None,
     ) -> dict:
+        try:
+            download_type, codec, format, quality = normalize_audio_request(
+                download_type, format, quality
+            )
+        except ValueError as exc:
+            return {"status": "error", "msg": str(exc)}
         url = self._normalize_url(url)
         if not url:
             return {"status": "error", "msg": "Missing URL"}
@@ -943,6 +978,9 @@ class SubscriptionManager:
             dl_codec = cur.codec
             dl_format = cur.format
             dl_quality = cur.quality
+            dl_type, dl_codec, dl_format, dl_quality = coerce_legacy_audio_request(
+                dl_type, dl_format, dl_quality
+            )
             dl_folder = cur.folder
             dl_prefix = cur.custom_name_prefix
             dl_plimit = cur.playlist_item_limit

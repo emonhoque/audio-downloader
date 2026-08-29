@@ -3,8 +3,6 @@ import { HttpClient } from '@angular/common/http';
 import { Subject, of } from 'rxjs';
 import { App } from './app';
 import { DownloadsService } from './services/downloads.service';
-import { SubscriptionsService } from './services/subscriptions.service';
-import { ToastService } from './services/toast.service';
 import { CookieService } from 'ngx-cookie-service';
 import { Download } from './interfaces';
 
@@ -68,32 +66,6 @@ class DownloadsServiceStub {
   }
 }
 
-class SubscriptionsServiceStub {
-  subscriptions = new Map();
-  subscriptionsChanged = new Subject<void>();
-  subscribeCalls: unknown[] = [];
-
-  subscribe(payload: unknown) {
-    this.subscribeCalls.push(payload);
-    return of({ status: 'ok' as const });
-  }
-
-  delete() {
-    return of({});
-  }
-
-  updateCalls: [string, unknown][] = [];
-
-  update(id: string, changes: unknown) {
-    this.updateCalls.push([id, changes]);
-    return of({ status: 'ok' as const });
-  }
-
-  refreshList() {
-    return of([]);
-  }
-}
-
 class CookieServiceStub {
   private cookies = new Map<string, string>();
 
@@ -131,7 +103,6 @@ describe('App', () => {
       imports: [App],
       providers: [
         { provide: DownloadsService, useValue: downloads },
-        { provide: SubscriptionsService, useClass: SubscriptionsServiceStub },
         { provide: CookieService, useClass: CookieServiceStub },
         {
           provide: HttpClient,
@@ -147,6 +118,39 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
+  });
+
+  it('defaults to MP3 at 320 kbps and exposes no media-type or codec selector', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const app = fixture.componentInstance;
+    const root = fixture.nativeElement as HTMLElement;
+    expect(app.format).toBe('mp3');
+    expect(app.quality).toBe('320');
+    expect(root.querySelector('select[name="format"]')).not.toBeNull();
+    expect(root.querySelector('select[name="quality"]')).not.toBeNull();
+    expect(root.querySelector('select[name="downloadType"]')).toBeNull();
+    expect(root.querySelector('select[name="codec"]')).toBeNull();
+    expect(root.querySelector('select[name="subtitleMode"]')).toBeNull();
+  });
+
+  it('uses Audio Downloader branding and exposes no subscription or GitHub UI', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.componentInstance.isAdvancedOpen = true;
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const brand = root.querySelector('.navbar-brand');
+    expect(brand?.textContent).toContain('Audio Downloader');
+    expect(root.textContent).not.toContain('MeTube');
+    expect(root.textContent).not.toContain('Subscriptions');
+    expect(root.textContent).not.toContain('Subscribe');
+    expect(root.querySelector('button[aria-label="Download or subscribe"]')).toBeNull();
+    expect(root.querySelector('input[name="checkIntervalMinutes"]')).toBeNull();
+    expect(root.querySelector('input[name="titleRegex"]')).toBeNull();
+    expect(root.querySelector('input[name="skipSubscriberOnly"]')).toBeNull();
+    expect(root.querySelector('.github-link')).toBeNull();
   });
 
   it('pre-fills the download folder from DEFAULT_FOLDER', () => {
@@ -176,13 +180,11 @@ describe('App', () => {
 
     expect(app.downloadingCollapsed).toBe(false);
     expect(app.completedCollapsed).toBe(false);
-    expect(app.subscriptionsCollapsed).toBe(false);
 
     app.toggleCompletedCollapsed();
 
     expect(app.completedCollapsed).toBe(true);
     expect(app.downloadingCollapsed).toBe(false);
-    expect(app.subscriptionsCollapsed).toBe(false);
     expect(cookies.get('metube_completed_collapsed')).toBe('true');
 
     // A fresh component picks the state back up from the cookie.
@@ -190,7 +192,6 @@ describe('App', () => {
     restored.detectChanges();
     expect(restored.componentInstance.completedCollapsed).toBe(true);
     expect(restored.componentInstance.downloadingCollapsed).toBe(false);
-    expect(restored.componentInstance.subscriptionsCollapsed).toBe(false);
   });
 
   it('asIsOrder returns a stable comparator value (insertion order preserved)', () => {
@@ -248,9 +249,9 @@ describe('App', () => {
       id: 'live1',
       title: 'Upcoming Stream',
       url: 'https://example.com/live',
-      download_type: 'video',
-      quality: 'best',
-      format: 'any',
+      download_type: 'audio',
+      quality: '320',
+      format: 'mp3',
       folder: '',
       custom_name_prefix: '',
       playlist_item_limit: 0,
@@ -277,7 +278,7 @@ describe('App', () => {
   it('shows the queued format in the Downloading table', () => {
     downloads.queue.set('https://example.com/v', {
       id: 'v1',
-      title: 'Some Video',
+      title: 'Some Audio',
       url: 'https://example.com/v',
       download_type: 'audio',
       quality: 'best',
@@ -306,53 +307,12 @@ describe('App', () => {
     const app = TestBed.createComponent(App).componentInstance;
     const base = { format: '' } as Download;
 
-    expect(app.formatLabel({ ...base, format: 'any' })).toBe('Auto');
-    expect(app.formatLabel({ ...base, format: 'mp4' })).toBe('MP4');
-    expect(app.formatLabel({ ...base, format: 'srt' })).toBe('SRT');
+    expect(app.formatLabel({ ...base, format: 'mp3' })).toBe('MP3');
+    expect(app.formatLabel({ ...base, format: 'opus' })).toBe('Opus');
+    expect(app.formatLabel({ ...base, format: 'any' })).toBe('ANY');
     // A format from a record older than the option list still reads sensibly.
     expect(app.formatLabel({ ...base, format: 'mkv' })).toBe('MKV');
     expect(app.formatLabel(base)).toBe('-');
-  });
-
-  it('includes titleRegex in subscribe payload', () => {
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    const subs = TestBed.inject(SubscriptionsService) as unknown as SubscriptionsServiceStub;
-    app.addUrl = 'https://example.com/channel';
-    app.titleRegex = 'EPISODE';
-    app.addSubscription();
-    expect(subs.subscribeCalls.length).toBe(1);
-    const payload = subs.subscribeCalls[0] as { titleRegex: string; skipSubscriberOnly: boolean };
-    expect(payload.titleRegex).toBe('EPISODE');
-    expect(payload.skipSubscriberOnly).toBe(false);
-  });
-
-  it('includes skipSubscriberOnly true when checked', () => {
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    const subs = TestBed.inject(SubscriptionsService) as unknown as SubscriptionsServiceStub;
-    app.addUrl = 'https://example.com/channel';
-    app.skipSubscriberOnly = true;
-    app.addSubscription();
-    expect(subs.subscribeCalls.length).toBe(1);
-    const payload = subs.subscribeCalls[0] as { skipSubscriberOnly: boolean };
-    expect(payload.skipSubscriberOnly).toBe(true);
-  });
-
-  it('passes clip fields through to the subscribe payload', () => {
-    // #1049: a subscription's options apply to all its future downloads, and
-    // clip bounds used to be stripped out on the way.
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    const subs = TestBed.inject(SubscriptionsService) as unknown as SubscriptionsServiceStub;
-    app.addUrl = 'https://example.com/channel';
-    app.clipStart = '1:00';
-    app.clipEnd = '2:00';
-    app.addSubscription();
-    expect(subs.subscribeCalls.length).toBe(1);
-    const payload = subs.subscribeCalls[0] as Record<string, unknown>;
-    expect(payload['clipStart']).toBe('1:00');
-    expect(payload['clipEnd']).toBe('2:00');
   });
 
   it('buildAddPayload includes clip times', () => {
@@ -370,11 +330,11 @@ describe('App', () => {
     const app = fixture.componentInstance;
     const download = {
       id: 'vid1',
-      title: 'Test Video',
+      title: 'Test Audio',
       url: 'https://example.com/v',
-      download_type: 'video',
-      quality: 'best',
-      format: 'any',
+      download_type: 'audio',
+      quality: '320',
+      format: 'mp3',
       folder: '',
       custom_name_prefix: '',
       playlist_item_limit: 0,
@@ -392,52 +352,6 @@ describe('App', () => {
     expect(downloads.retryCalls).toEqual([download.url]);
   });
 
-  it('blocks subscribe with invalid title regex', () => {
-    const toasts = TestBed.inject(ToastService);
-    const errorSpy = vi.spyOn(toasts, 'error').mockImplementation(() => undefined);
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    const subs = TestBed.inject(SubscriptionsService) as unknown as SubscriptionsServiceStub;
-    app.addUrl = 'https://example.com/channel';
-    app.titleRegex = '[';
-    app.addSubscription();
-    expect(subs.subscribeCalls.length).toBe(0);
-    expect(errorSpy).toHaveBeenCalledWith('Invalid subscription title filter (regex)');
-    errorSpy.mockRestore();
-  });
-
-  it('renames a subscription and closes the inline editor', () => {
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    const subs = TestBed.inject(SubscriptionsService) as unknown as SubscriptionsServiceStub;
-
-    app.beginEditName('sub1', 'Videos');
-    expect(app.editingNameId).toBe('sub1');
-    expect(app.nameEditDraft).toBe('Videos');
-
-    app.nameEditDraft = '  Jane uploads  ';
-    app.saveName('sub1');
-
-    expect(subs.updateCalls).toEqual([['sub1', { name: 'Jane uploads' }]]);
-    expect(app.editingNameId).toBeNull();
-  });
-
-  it('blocks renaming a subscription to an empty name', () => {
-    const toasts = TestBed.inject(ToastService);
-    const errorSpy = vi.spyOn(toasts, 'error').mockImplementation(() => undefined);
-    const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    const subs = TestBed.inject(SubscriptionsService) as unknown as SubscriptionsServiceStub;
-
-    app.beginEditName('sub1', 'Videos');
-    app.nameEditDraft = '   ';
-    app.saveName('sub1');
-
-    expect(subs.updateCalls.length).toBe(0);
-    expect(app.editingNameId).toBe('sub1');
-    expect(errorSpy).toHaveBeenCalledWith('Subscription name must not be empty');
-    errorSpy.mockRestore();
-  });
   // Issue #533: the server picks AUDIO_DOWNLOAD_DIR on download_type alone
   // (ytdl.py), so the UI's choice of URL base has to use the same rule. It used
   // to also treat any .mp3 as audio, which pointed the link at audio_download/
@@ -447,9 +361,9 @@ describe('App', () => {
       id: 'vid1',
       title: 'Test',
       url: 'https://example.com/v',
-      download_type: 'video',
-      quality: 'best',
-      format: 'any',
+      download_type: 'audio',
+      quality: '320',
+      format: 'mp3',
       folder: '',
       custom_name_prefix: '',
       playlist_item_limit: 0,
@@ -458,7 +372,7 @@ describe('App', () => {
       percent: 100,
       speed: 0,
       eta: 0,
-      filename: 'song.mp4',
+      filename: 'song.mp3',
       checked: false,
       ...over,
     } as Download);
@@ -478,15 +392,17 @@ describe('App', () => {
       expect(link).toBe('audio_download/song.mp3');
     });
 
-    it('uses the video base for an mp3 produced by a video download', () => {
+    it('uses the legacy media base for an old video-typed MP3 record', () => {
       const app = appWithDirs();
       const link = app.buildDownloadLink(makeDownload({ download_type: 'video', filename: 'song.mp3' }));
       expect(link).toBe('download/song.mp3');
     });
 
-    it('uses the video base for a video download', () => {
+    it('keeps historical video records linked from the legacy media base', () => {
       const app = appWithDirs();
-      const link = app.buildDownloadLink(makeDownload({ filename: 'clip.mp4' }));
+      const link = app.buildDownloadLink(
+        makeDownload({ download_type: 'video', filename: 'clip.mp4' }),
+      );
       expect(link).toBe('download/clip.mp4');
     });
 
@@ -507,9 +423,9 @@ describe('App', () => {
       id: 'vid1',
       title: 'Test',
       url: 'https://example.com/v',
-      download_type: 'video',
-      quality: 'best',
-      format: 'any',
+      download_type: 'audio',
+      quality: '320',
+      format: 'mp3',
       folder: '',
       custom_name_prefix: '',
       playlist_item_limit: 0,

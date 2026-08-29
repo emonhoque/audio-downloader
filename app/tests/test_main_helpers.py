@@ -10,8 +10,8 @@ import main
 
 
 class MigrateLegacyRequestTests(unittest.TestCase):
-    def test_already_new_schema_unchanged(self):
-        post = {"download_type": "video", "codec": "h264", "format": "mp4", "quality": "1080"}
+    def test_explicit_audio_schema_unchanged(self):
+        post = {"download_type": "audio", "codec": "auto", "format": "opus", "quality": "best"}
         before = post.copy()
         self.assertIs(main._migrate_legacy_request(post), post)
         self.assertEqual(post, before)
@@ -23,40 +23,26 @@ class MigrateLegacyRequestTests(unittest.TestCase):
         self.assertEqual(post["codec"], "auto")
         self.assertEqual(post["format"], "m4a")
 
-    def test_legacy_thumbnail(self):
-        post = {"format": "thumbnail", "quality": "best"}
-        main._migrate_legacy_request(post)
-        self.assertEqual(post["download_type"], "thumbnail")
-        self.assertEqual(post["format"], "jpg")
-        self.assertEqual(post["quality"], "best")
+    def test_legacy_non_audio_requests_become_mp3_320(self):
+        for post in (
+            {"format": "thumbnail", "quality": "best"},
+            {"format": "captions", "subtitle_format": "vtt", "quality": "best"},
+            {"format": "any", "quality": "best_ios", "video_codec": "auto"},
+            {"format": "mp4", "quality": "1080", "video_codec": "h265"},
+        ):
+            with self.subTest(post=post):
+                main._migrate_legacy_request(post)
+                self.assertEqual(post["download_type"], "audio")
+                self.assertEqual(post["codec"], "auto")
+                self.assertEqual(post["format"], "mp3")
+                self.assertEqual(post["quality"], "320")
 
-    def test_legacy_captions_with_subtitle_format(self):
-        post = {"format": "captions", "subtitle_format": "vtt", "quality": "best"}
-        main._migrate_legacy_request(post)
-        self.assertEqual(post["download_type"], "captions")
-        self.assertEqual(post["format"], "vtt")
-
-    def test_legacy_video_best_ios(self):
-        post = {"format": "any", "quality": "best_ios", "video_codec": "auto"}
-        main._migrate_legacy_request(post)
-        self.assertEqual(post["download_type"], "video")
-        self.assertEqual(post["format"], "ios")
-        self.assertEqual(post["quality"], "best")
-
-    def test_legacy_video_quality_audio_maps_to_m4a(self):
+    def test_legacy_audio_quality_marker_becomes_mp3_320(self):
         post = {"format": "mp4", "quality": "audio", "video_codec": "h264"}
         main._migrate_legacy_request(post)
         self.assertEqual(post["download_type"], "audio")
-        self.assertEqual(post["format"], "m4a")
-        self.assertEqual(post["quality"], "best")
-
-    def test_legacy_video_default(self):
-        post = {"format": "mp4", "quality": "1080", "video_codec": "h265"}
-        main._migrate_legacy_request(post)
-        self.assertEqual(post["download_type"], "video")
-        self.assertEqual(post["codec"], "h265")
-        self.assertEqual(post["format"], "mp4")
-        self.assertEqual(post["quality"], "1080")
+        self.assertEqual(post["format"], "mp3")
+        self.assertEqual(post["quality"], "320")
 
 
 class ParseLogLevelTests(unittest.TestCase):
@@ -122,6 +108,45 @@ class ParseYtdlOverridesTests(unittest.TestCase):
 
 
 class ParseDownloadOptionsTests(unittest.TestCase):
+    def test_missing_media_fields_default_to_mp3_320(self):
+        parsed = main.parse_download_options({"url": "https://example.com/v"})
+        self.assertEqual(parsed["download_type"], "audio")
+        self.assertEqual(parsed["codec"], "auto")
+        self.assertEqual(parsed["format"], "mp3")
+        self.assertEqual(parsed["quality"], "320")
+
+    def test_explicit_alternate_audio_format_is_preserved(self):
+        parsed = main.parse_download_options({
+            "url": "https://example.com/v",
+            "format": "flac",
+            "quality": "best",
+        })
+        self.assertEqual(parsed["download_type"], "audio")
+        self.assertEqual(parsed["format"], "flac")
+        self.assertEqual(parsed["quality"], "best")
+
+    def test_explicit_invalid_audio_format_is_rejected(self):
+        with self.assertRaises(main.web.HTTPBadRequest):
+            main.parse_download_options({
+                "url": "https://example.com/v",
+                "download_type": "audio",
+                "format": "aac",
+                "quality": "best",
+            })
+
+    def test_obsolete_video_fields_are_forced_to_mp3_320(self):
+        parsed = main.parse_download_options({
+            "url": "https://example.com/v",
+            "download_type": "video",
+            "codec": "h264",
+            "format": "mp4",
+            "quality": "1080",
+        })
+        self.assertEqual(parsed["download_type"], "audio")
+        self.assertEqual(parsed["codec"], "auto")
+        self.assertEqual(parsed["format"], "mp3")
+        self.assertEqual(parsed["quality"], "320")
+
     def test_accepts_known_preset_and_overrides(self):
         previous = dict(main.config.YTDL_OPTIONS_PRESETS)
         previous_allow = main.config.ALLOW_YTDL_OPTIONS_OVERRIDES
@@ -287,16 +312,18 @@ class ParseDownloadOptionsTests(unittest.TestCase):
                 "clip_end": "50",
             })
 
-    def test_clip_rejected_for_captions(self):
-        with self.assertRaises(main.web.HTTPBadRequest):
-            main.parse_download_options({
-                "url": "https://example.com/watch?v=1",
-                "download_type": "captions",
-                "codec": "auto",
-                "format": "srt",
-                "quality": "best",
-                "clip_start": "1",
-            })
+    def test_clip_for_legacy_captions_request_applies_to_default_audio(self):
+        parsed = main.parse_download_options({
+            "url": "https://example.com/watch?v=1",
+            "download_type": "captions",
+            "codec": "auto",
+            "format": "srt",
+            "quality": "best",
+            "clip_start": "1",
+        })
+        self.assertEqual(parsed["download_type"], "audio")
+        self.assertEqual(parsed["format"], "mp3")
+        self.assertEqual(parsed["clip_start"], 1.0)
 
 
 class GetCustomDirsTests(unittest.TestCase):

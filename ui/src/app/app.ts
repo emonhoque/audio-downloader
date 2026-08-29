@@ -7,15 +7,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FontAwesomeModule } from '@fortawesome/angular-fontawesome';
 import { NgbModule, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { NgSelectModule } from '@ng-select/ng-select';
-import { faTrashAlt, faCheckCircle, faTimesCircle, faRedoAlt, faSun, faMoon, faCheck, faCircleHalfStroke, faDownload, faExternalLinkAlt, faFileImport, faFileExport, faCopy, faClock, faTachometerAlt, faSortAmountDown, faSortAmountUp, faChevronRight, faChevronDown, faUpload, faPause, faPlay, faShareNodes } from '@fortawesome/free-solid-svg-icons';
-import { faGithub } from '@fortawesome/free-brands-svg-icons';
+import { faTrashAlt, faCheckCircle, faTimesCircle, faRedoAlt, faSun, faMoon, faCheck, faCircleHalfStroke, faDownload, faExternalLinkAlt, faFileImport, faFileExport, faCopy, faClock, faTachometerAlt, faSortAmountDown, faSortAmountUp, faChevronRight, faChevronDown, faUpload, faShareNodes } from '@fortawesome/free-solid-svg-icons';
 import { CookieService } from 'ngx-cookie-service';
 import { AddDownloadPayload, DownloadsService } from './services/downloads.service';
 import { MeTubeSocket } from './services/metube-socket.service';
-import { SubscriptionsService } from './services/subscriptions.service';
 import { ToastService } from './services/toast.service';
 import { BatchUrlsService, BatchUrlFilter } from './services/batch-urls.service';
-import { SubscriptionRow } from './interfaces/subscription';
 import { Themes } from './theme';
 import {
   Download,
@@ -24,13 +21,7 @@ import {
   Quality,
   Option,
   AudioFormatOption,
-  DOWNLOAD_TYPES,
-  VIDEO_CODECS,
-  VIDEO_FORMATS,
-  VIDEO_QUALITIES,
   AUDIO_FORMATS,
-  CAPTION_FORMATS,
-  THUMBNAIL_FORMATS,
   State,
 } from './interfaces';
 import { EtaPipe, SpeedPipe, FileSizePipe } from './pipes';
@@ -59,7 +50,6 @@ import { SelectAllCheckboxComponent, ItemCheckboxComponent, ToastContainerCompon
 })
 export class App implements AfterViewInit, OnInit, OnDestroy {
   downloads = inject(DownloadsService);
-  subscriptionsSvc = inject(SubscriptionsService);
   private toasts = inject(ToastService);
   private batchUrls = inject(BatchUrlsService);
   private socket = inject(MeTubeSocket);
@@ -69,16 +59,8 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   private destroyRef = inject(DestroyRef);
 
   addUrl!: string;
-  downloadTypes: Option[] = DOWNLOAD_TYPES;
-  videoCodecs: Option[] = VIDEO_CODECS;
-  videoFormats: Option[] = VIDEO_FORMATS;
   audioFormats: AudioFormatOption[] = AUDIO_FORMATS;
-  captionFormats: Option[] = CAPTION_FORMATS;
-  thumbnailFormats: Option[] = THUMBNAIL_FORMATS;
-  formatOptions: Option[] = [];
   qualities!: Quality[];
-  downloadType: string;
-  codec: string;
   quality: string;
   format: string;
   folder!: string;
@@ -90,27 +72,11 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   chapterTemplate: string;
   clipStart = '';
   clipEnd = '';
-  subtitleLanguage: string;
-  subtitleMode: string;
   ytdlOptionsPresets: string[] = [];
   ytdlOptionsOverrides: string;
   ytdlOptionPresetNames: string[] = [];
   addInProgress = false;
   cancelRequested = false;
-  subscribeInProgress = false;
-  checkIntervalMinutes = 60;
-  titleRegex = '';
-  skipSubscriberOnly = false;
-  editingTitleRegexId: string | null = null;
-  titleRegexEditDraft = '';
-  editingNameId: string | null = null;
-  nameEditDraft = '';
-  readonly subscriptionNameMaxLength = 200;
-  cachedSubs: [string, SubscriptionRow][] = [];
-  selectedSubscriptionIds = new Set<string>();
-  checkingSubscriptionIds = new Set<string>();
-  checkingAllSubscriptions = false;
-  checkingSelectedSubscriptions = false;
   hasCookies = false;
   cookieUploadInProgress = false;
   themes: Theme[] = Themes;
@@ -133,29 +99,18 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   private static readonly BATCH_IMPORT_CONCURRENCY = 4;
   ytDlpOptionsUpdateTime: string | null = null;
   ytDlpVersion: string | null = null;
-  metubeVersion: string | null = null;
   isAdvancedOpen = false;
   sortAscending = false;
   downloadingCollapsed = false;
   completedCollapsed = false;
-  subscriptionsCollapsed = false;
   expandedErrors: Set<string> = new Set<string>();
   cachedSortedDone: [string, Download][] = [];
   // The done ids in rendered order, so a shift-click range follows the sort
   // the user is looking at rather than the map's insertion order.
   cachedSortedDoneIds: string[] = [];
   lastCopiedErrorId: string | null = null;
-  private previousDownloadType = 'video';
   private addRequestSub?: Subscription;
   private liveCountdownTimer?: ReturnType<typeof setInterval>;
-  private selectionsByType: Record<string, {
-    codec: string;
-    format: string;
-    quality: string;
-    subtitleLanguage: string;
-    subtitleMode: string;
-  }> = {};
-  private readonly selectionCookiePrefix = 'metube_selection_';
   private readonly settingsCookieExpiryDays = 3650;
   private lastFocusedElement: HTMLElement | null = null;
   private colorSchemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -194,7 +149,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   faFileImport = faFileImport;
   faFileExport = faFileExport;
   faCopy = faCopy;
-  faGithub = faGithub;
   faClock = faClock;
   faTachometerAlt = faTachometerAlt;
   faSortAmountDown = faSortAmountDown;
@@ -202,65 +156,10 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   faChevronRight = faChevronRight;
   faChevronDown = faChevronDown;
   faUpload = faUpload;
-  faPause = faPause;
-  faPlay = faPlay;
   faShareNodes = faShareNodes;
-  subtitleLanguages = [
-    { id: 'en', text: 'English' },
-    { id: 'ar', text: 'Arabic' },
-    { id: 'bn', text: 'Bengali' },
-    { id: 'bg', text: 'Bulgarian' },
-    { id: 'ca', text: 'Catalan' },
-    { id: 'cs', text: 'Czech' },
-    { id: 'da', text: 'Danish' },
-    { id: 'nl', text: 'Dutch' },
-    { id: 'es', text: 'Spanish' },
-    { id: 'et', text: 'Estonian' },
-    { id: 'fi', text: 'Finnish' },
-    { id: 'fr', text: 'French' },
-    { id: 'de', text: 'German' },
-    { id: 'el', text: 'Greek' },
-    { id: 'he', text: 'Hebrew' },
-    { id: 'hi', text: 'Hindi' },
-    { id: 'hu', text: 'Hungarian' },
-    { id: 'id', text: 'Indonesian' },
-    { id: 'it', text: 'Italian' },
-    { id: 'lt', text: 'Lithuanian' },
-    { id: 'lv', text: 'Latvian' },
-    { id: 'ms', text: 'Malay' },
-    { id: 'no', text: 'Norwegian' },
-    { id: 'pl', text: 'Polish' },
-    { id: 'pt', text: 'Portuguese' },
-    { id: 'pt-BR', text: 'Portuguese (Brazil)' },
-    { id: 'ro', text: 'Romanian' },
-    { id: 'ru', text: 'Russian' },
-    { id: 'sk', text: 'Slovak' },
-    { id: 'sl', text: 'Slovenian' },
-    { id: 'sr', text: 'Serbian' },
-    { id: 'sv', text: 'Swedish' },
-    { id: 'ta', text: 'Tamil' },
-    { id: 'te', text: 'Telugu' },
-    { id: 'th', text: 'Thai' },
-    { id: 'tr', text: 'Turkish' },
-    { id: 'uk', text: 'Ukrainian' },
-    { id: 'ur', text: 'Urdu' },
-    { id: 'vi', text: 'Vietnamese' },
-    { id: 'ja', text: 'Japanese' },
-    { id: 'ko', text: 'Korean' },
-    { id: 'zh-Hans', text: 'Chinese (Simplified)' },
-    { id: 'zh-Hant', text: 'Chinese (Traditional)' },
-  ];
-  subtitleModes = [
-    { id: 'prefer_manual', text: 'Prefer Manual' },
-    { id: 'prefer_auto', text: 'Prefer Auto' },
-    { id: 'manual_only', text: 'Manual Only' },
-    { id: 'auto_only', text: 'Auto Only' },
-  ];
   constructor() {
-    this.downloadType = this.cookieService.get('metube_download_type') || 'video';
-    this.codec = this.cookieService.get('metube_codec') || 'auto';
-    this.format = this.cookieService.get('metube_format') || 'any';
-    this.quality = this.cookieService.get('metube_quality') || 'best';
+    this.format = this.cookieService.get('metube_format') || 'mp3';
+    this.quality = this.cookieService.get('metube_quality') || '320';
     this.autoStart = this.cookieService.get('metube_auto_start') !== 'false';
     this.splitByChapters = this.cookieService.get('metube_split_chapters') === 'true';
     this.sponsorblock = this.cookieService.get('metube_sponsorblock') === 'true';
@@ -268,38 +167,18 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     this.chapterTemplate = this.cookieService.get('metube_chapter_template') || '';
     this.clipStart = this.cookieService.get('metube_clip_start') || '';
     this.clipEnd = this.cookieService.get('metube_clip_end') || '';
-    this.subtitleLanguage = this.cookieService.get('metube_subtitle_language') || 'en';
-    this.subtitleMode = this.cookieService.get('metube_subtitle_mode') || 'prefer_manual';
     this.ytdlOptionsPresets = this.loadYtdlOptionsPresetsFromCookie();
     this.ytdlOptionsOverrides = this.cookieService.get('metube_ytdl_options_overrides') || '';
-    const allowedDownloadTypes = new Set(this.downloadTypes.map(t => t.id));
-    const allowedVideoCodecs = new Set(this.videoCodecs.map(c => c.id));
-    if (!allowedDownloadTypes.has(this.downloadType)) {
-      this.downloadType = 'video';
+    const allowedAudioFormats = new Set(this.audioFormats.map((audioFormat) => audioFormat.id));
+    if (!allowedAudioFormats.has(this.format)) {
+      this.format = 'mp3';
     }
-    if (!allowedVideoCodecs.has(this.codec)) {
-      this.codec = 'auto';
-    }
-    const allowedSubtitleModes = new Set(this.subtitleModes.map(mode => mode.id));
-    if (!allowedSubtitleModes.has(this.subtitleMode)) {
-      this.subtitleMode = 'prefer_manual';
-    }
-    this.loadSavedSelections();
-    this.restoreSelection(this.downloadType);
-    this.normalizeSelectionsForType();
     this.setQualities();
-    this.refreshFormatOptions();
-    this.previousDownloadType = this.downloadType;
-    this.saveSelection(this.downloadType);
+    this.cookieService.set('metube_format', this.format, { expires: this.settingsCookieExpiryDays });
+    this.cookieService.set('metube_quality', this.quality, { expires: this.settingsCookieExpiryDays });
     this.sortAscending = this.cookieService.get('metube_sort_ascending') === 'true';
     this.downloadingCollapsed = this.cookieService.get('metube_downloading_collapsed') === 'true';
     this.completedCollapsed = this.cookieService.get('metube_completed_collapsed') === 'true';
-    this.subscriptionsCollapsed = this.cookieService.get('metube_subscriptions_collapsed') === 'true';
-
-    const ci = parseInt(this.cookieService.get('metube_check_interval') || '', 10);
-    if (!Number.isNaN(ci) && ci >= 1) {
-      this.checkIntervalMinutes = ci;
-    }
     this.activeTheme = this.getPreferredTheme(this.cookieService);
 
     // Subscribe to download updates
@@ -317,11 +196,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     this.downloads.updated.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.updateMetrics();
       this.syncLiveCountdownTimer();
-      this.cdr.markForCheck();
-    });
-
-    this.subscriptionsSvc.subscriptionsChanged.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      this.rebuildCachedSubs();
       this.cdr.markForCheck();
     });
   }
@@ -373,26 +247,8 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
 
   qualityChanged() {
     this.cookieService.set('metube_quality', this.quality, { expires: this.settingsCookieExpiryDays });
-    this.saveSelection(this.downloadType);
     // Re-trigger custom directory change
     this.downloads.customDirsChanged.next(this.downloads.customDirs);
-  }
-
-  downloadTypeChanged() {
-    this.saveSelection(this.previousDownloadType);
-    this.restoreSelection(this.downloadType);
-    this.cookieService.set('metube_download_type', this.downloadType, { expires: this.settingsCookieExpiryDays });
-    this.normalizeSelectionsForType(false);
-    this.setQualities();
-    this.refreshFormatOptions();
-    this.saveSelection(this.downloadType);
-    this.previousDownloadType = this.downloadType;
-    this.downloads.customDirsChanged.next(this.downloads.customDirs);
-  }
-
-  codecChanged() {
-    this.cookieService.set('metube_codec', this.codec, { expires: this.settingsCookieExpiryDays });
-    this.saveSelection(this.downloadType);
   }
 
   showAdvanced() {
@@ -410,18 +266,12 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     );
     return merge(debouncedText$, this.folderFocus$, clicksWithClosedPopup$).pipe(
       map(term => {
-        const dirs = this.isAudioType()
-          ? (this.downloads.customDirs?.['audio_download_dir'] ?? [])
-          : (this.downloads.customDirs?.['download_dir'] ?? []);
+        const dirs = this.downloads.customDirs?.['audio_download_dir'] ?? [];
         const t = (term ?? '').toLowerCase();
         return (t === '' ? dirs : dirs.filter(d => d.toLowerCase().includes(t))).slice(0, 10);
       }),
     );
   };
-
-  isAudioType() {
-    return this.downloadType === 'audio';
-  }
 
   getYtdlOptionsUpdateTime() {
     this.downloads.ytdlOptionsChanged.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -454,12 +304,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
         // Set chapter template from backend config if not already set by cookie
         if (!this.chapterTemplate) {
           this.chapterTemplate = config['OUTPUT_TEMPLATE_CHAPTER'];
-        }
-        if (!this.cookieService.check('metube_check_interval')) {
-          const dci = parseInt(String(config['SUBSCRIPTION_DEFAULT_CHECK_INTERVAL'] ?? 60), 10);
-          if (!Number.isNaN(dci) && dci >= 1) {
-            this.checkIntervalMinutes = dci;
-          }
         }
         this.cdr.markForCheck();
       }
@@ -522,22 +366,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     return true;
   }
 
-  private rebuildCachedSubs() {
-    this.cachedSubs = Array.from(this.subscriptionsSvc.subscriptions.entries());
-    const validIds = new Set(this.cachedSubs.map(([id]) => id));
-    for (const id of [...this.selectedSubscriptionIds]) {
-      if (!validIds.has(id)) {
-        this.selectedSubscriptionIds.delete(id);
-      }
-    }
-  }
-
-  checkIntervalChanged() {
-    this.cookieService.set('metube_check_interval', String(this.checkIntervalMinutes), {
-      expires: this.settingsCookieExpiryDays,
-    });
-  }
-
   private getStatusError(res: unknown): string | null {
     const status = res as { status?: string; msg?: string };
     return status?.status === 'error' ? status.msg || null : null;
@@ -549,283 +377,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
       this.toasts.error(error || fallbackMsg);
     }
     this.cdr.markForCheck();
-  }
-
-  private refreshSubscriptionsWithAlert() {
-    this.subscriptionsSvc.refreshList().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((refreshRes) => {
-      const error = this.getStatusError(refreshRes);
-      if (error) {
-        this.toasts.error(error || 'Refresh subscriptions failed');
-        return;
-      }
-      this.cdr.markForCheck();
-    });
-  }
-
-  isSubSelected(id: string): boolean {
-    return this.selectedSubscriptionIds.has(id);
-  }
-
-  toggleSubSelected(id: string) {
-    if (this.selectedSubscriptionIds.has(id)) {
-      this.selectedSubscriptionIds.delete(id);
-    } else {
-      this.selectedSubscriptionIds.add(id);
-    }
-    this.cdr.markForCheck();
-  }
-
-  toggleSubMaster(event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.selectedSubscriptionIds.clear();
-    if (checked) {
-      for (const [id] of this.cachedSubs) {
-        this.selectedSubscriptionIds.add(id);
-      }
-    }
-    this.cdr.markForCheck();
-  }
-
-  allSubsSelected(): boolean {
-    if (this.cachedSubs.length === 0) {
-      return false;
-    }
-    return this.cachedSubs.every(([id]) => this.selectedSubscriptionIds.has(id));
-  }
-
-  addSubscription() {
-    if (this.subscribeInProgress) {
-      return;
-    }
-    const payload = this.buildAddPayload();
-    if (!payload.url?.trim()) {
-      this.toasts.error('Please enter a URL');
-      return;
-    }
-    const tr = (this.titleRegex || '').trim();
-    if (tr) {
-      try {
-        void RegExp(tr);
-      } catch {
-        this.toasts.error('Invalid subscription title filter (regex)');
-        return;
-      }
-    }
-    if (payload.splitByChapters && !payload.chapterTemplate.includes('%(section_number)')) {
-      this.toasts.error('Chapter template must include %(section_number)');
-      return;
-    }
-    if (!this.validateYtdlOptionsOverrides(payload.ytdlOptionsOverrides)) {
-      return;
-    }
-    this.subscribeInProgress = true;
-    this.subscriptionsSvc
-      .subscribe({
-        ...payload,
-        checkIntervalMinutes: this.checkIntervalMinutes,
-        titleRegex: tr,
-        skipSubscriberOnly: this.skipSubscriberOnly,
-      })
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        finalize(() => {
-          this.subscribeInProgress = false;
-          this.cdr.markForCheck();
-        }),
-      )
-      .subscribe({
-        next: (res) => {
-          const r = res as { status?: string; msg?: string };
-          if (r.status === 'error') {
-            this.toasts.error(r.msg || 'Subscribe failed');
-          } else {
-            this.addUrl = '';
-            this.titleRegex = '';
-            this.skipSubscriberOnly = false;
-          }
-        },
-      });
-  }
-
-  beginEditTitleRegex(id: string, current: string | undefined) {
-    this.editingTitleRegexId = id;
-    this.titleRegexEditDraft = current ?? '';
-    this.cdr.markForCheck();
-  }
-
-  cancelEditTitleRegex() {
-    this.editingTitleRegexId = null;
-    this.titleRegexEditDraft = '';
-    this.cdr.markForCheck();
-  }
-
-  saveTitleRegex(id: string) {
-    const raw = (this.titleRegexEditDraft || '').trim();
-    if (raw) {
-      try {
-        void RegExp(raw);
-      } catch {
-        this.toasts.error('Invalid subscription title filter (regex)');
-        return;
-      }
-    }
-    this.subscriptionsSvc.update(id, { title_regex: raw }).subscribe((res) => {
-      const error = this.getStatusError(res);
-      if (error) {
-        this.toasts.error(error || 'Update subscription failed');
-        return;
-      }
-      this.cancelEditTitleRegex();
-    });
-  }
-
-  beginEditName(id: string, current: string | undefined) {
-    this.editingNameId = id;
-    this.nameEditDraft = current ?? '';
-    this.cdr.markForCheck();
-  }
-
-  cancelEditName() {
-    this.editingNameId = null;
-    this.nameEditDraft = '';
-    this.cdr.markForCheck();
-  }
-
-  saveName(id: string) {
-    const name = (this.nameEditDraft || '').trim();
-    if (!name) {
-      this.toasts.error('Subscription name must not be empty');
-      return;
-    }
-    this.subscriptionsSvc.update(id, { name }).subscribe((res) => {
-      const error = this.getStatusError(res);
-      if (error) {
-        this.toasts.error(error || 'Update subscription failed');
-        return;
-      }
-      this.cancelEditName();
-    });
-  }
-
-  deleteSubscription(id: string) {
-    this.subscriptionsSvc.delete([id]).subscribe((res) => {
-      const error = this.getStatusError(res);
-      if (error) {
-        this.toasts.error(error || 'Delete subscription failed');
-        return;
-      }
-      this.selectedSubscriptionIds.delete(id);
-      this.cdr.markForCheck();
-    });
-  }
-
-  deleteSelectedSubscriptions() {
-    const ids = Array.from(this.selectedSubscriptionIds);
-    if (!ids.length) {
-      return;
-    }
-    this.subscriptionsSvc.delete(ids).subscribe((res) => {
-      const error = this.getStatusError(res);
-      if (error) {
-        this.toasts.error(error || 'Delete subscriptions failed');
-        return;
-      }
-      this.selectedSubscriptionIds.clear();
-      this.cdr.markForCheck();
-    });
-  }
-
-  checkSubscriptionNow(id: string) {
-    if (this.checkingSubscriptionIds.has(id)) {
-      return;
-    }
-    this.checkingSubscriptionIds.add(id);
-    this.cdr.markForCheck();
-    this.subscriptionsSvc
-      .checkNow([id])
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        finalize(() => {
-          this.checkingSubscriptionIds.delete(id);
-          this.cdr.markForCheck();
-        }),
-      )
-      .subscribe((res) => {
-        const error = this.getStatusError(res);
-        if (error) {
-          this.toasts.error(error || 'Subscription check failed');
-          return;
-        }
-        this.refreshSubscriptionsWithAlert();
-      });
-  }
-
-  isSubscriptionChecking(id: string): boolean {
-    return this.checkingSubscriptionIds.has(id);
-  }
-
-  private runBulkSubscriptionCheck(ids: string[] | undefined, mode: 'all' | 'selected') {
-    const targetIds = ids ?? this.cachedSubs.filter(([, row]) => row.enabled).map(([id]) => id);
-    if (!targetIds.length) {
-      return;
-    }
-
-    const checkedIds = new Set(targetIds);
-    for (const id of checkedIds) {
-      this.checkingSubscriptionIds.add(id);
-    }
-    if (mode === 'all') {
-      this.checkingAllSubscriptions = true;
-    } else {
-      this.checkingSelectedSubscriptions = true;
-    }
-    this.cdr.markForCheck();
-
-    this.subscriptionsSvc
-      .checkNow(ids)
-      .pipe(
-        takeUntilDestroyed(this.destroyRef),
-        finalize(() => {
-          for (const id of checkedIds) {
-            this.checkingSubscriptionIds.delete(id);
-          }
-          if (mode === 'all') {
-            this.checkingAllSubscriptions = false;
-          } else {
-            this.checkingSelectedSubscriptions = false;
-          }
-          this.cdr.markForCheck();
-        }),
-      )
-      .subscribe((res) => {
-        const error = this.getStatusError(res);
-        if (error) {
-          this.toasts.error(error || 'Subscription check failed');
-          return;
-        }
-        this.refreshSubscriptionsWithAlert();
-      });
-  }
-
-  checkSelectedSubscriptions() {
-    const ids = Array.from(this.selectedSubscriptionIds);
-    if (!ids.length) {
-      return;
-    }
-    this.runBulkSubscriptionCheck(ids, 'selected');
-  }
-
-  checkAllSubscriptions() {
-    this.runBulkSubscriptionCheck(undefined, 'all');
-  }
-
-  toggleSubscriptionEnabled(row: SubscriptionRow) {
-    this.subscriptionsSvc.update(row.id, { enabled: !row.enabled }).subscribe((res) => {
-      const error = this.getStatusError(res);
-      if (error) {
-        this.toasts.error(error || 'Update subscription failed');
-      }
-    });
   }
 
   getPreferredTheme(cookieService: CookieService) {
@@ -854,7 +405,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   formatChanged() {
     this.cookieService.set('metube_format', this.format, { expires: this.settingsCookieExpiryDays });
     this.setQualities();
-    this.saveSelection(this.downloadType);
     // Re-trigger custom directory change
     this.downloads.customDirsChanged.next(this.downloads.customDirs);
   }
@@ -888,16 +438,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     this.cookieService.set('metube_clip_end', this.clipEnd, { expires: this.settingsCookieExpiryDays });
   }
 
-  subtitleLanguageChanged() {
-    this.cookieService.set('metube_subtitle_language', this.subtitleLanguage, { expires: this.settingsCookieExpiryDays });
-    this.saveSelection(this.downloadType);
-  }
-
-  subtitleModeChanged() {
-    this.cookieService.set('metube_subtitle_mode', this.subtitleMode, { expires: this.settingsCookieExpiryDays });
-    this.saveSelection(this.downloadType);
-  }
-
   ytdlOptionsPresetsChanged() {
     this.cookieService.set(
       'metube_ytdl_options_presets',
@@ -910,24 +450,11 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     this.cookieService.set('metube_ytdl_options_overrides', this.ytdlOptionsOverrides, { expires: this.settingsCookieExpiryDays });
   }
 
-  isVideoType() {
-    return this.downloadType === 'video';
-  }
-
   formatQualityLabel(download: Download): string {
-    if (download.download_type === 'captions' || download.download_type === 'thumbnail') {
-      return '-';
-    }
     const q = download.quality;
     if (!q) return '';
-    if (/^\d+$/.test(q) && download.download_type === 'audio') return `${q} kbps`;
-    if (/^\d+$/.test(q)) return `${q}p`;
+    if (/^\d+$/.test(q)) return `${q} kbps`;
     return q.charAt(0).toUpperCase() + q.slice(1);
-  }
-
-  downloadTypeLabel(download: Download): string {
-    const type = download.download_type || 'video';
-    return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
   // The format the download was queued with, labelled the way the form labels
@@ -937,23 +464,13 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     if (!format) {
       return '-';
     }
-    const options: Option[] = [
-      ...this.videoFormats,
-      ...this.audioFormats,
-      ...this.captionFormats,
-      ...this.thumbnailFormats,
-    ];
+    const options: Option[] = [...this.audioFormats];
     return options.find(o => o.id === format)?.text ?? format.toUpperCase();
   }
 
   formatCodecLabel(download: Download): string {
-    if (download.download_type !== 'video') {
-      const format = (download.format || '').toUpperCase();
-      return format || '-';
-    }
-    const codec = download.codec;
-    if (!codec || codec === 'auto') return 'Auto';
-    return this.videoCodecs.find(c => c.id === codec)?.text ?? codec;
+    const format = (download.format || '').toUpperCase();
+    return format || '-';
   }
 
   queueSelectionChanged(checked: number) {
@@ -987,135 +504,19 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   }
 
   setQualities() {
-    if (this.downloadType === 'video') {
-      this.qualities = this.format === 'ios'
-        ? [{ id: 'best', text: 'Best' }]
-        : VIDEO_QUALITIES;
-    } else if (this.downloadType === 'audio') {
-      const selectedFormat = this.audioFormats.find(el => el.id === this.format);
-      this.qualities = selectedFormat ? selectedFormat.qualities : [{ id: 'best', text: 'Best' }];
-    } else {
-      this.qualities = [{ id: 'best', text: 'Best' }];
-    }
+    const selectedFormat = this.audioFormats.find(el => el.id === this.format);
+    this.qualities = selectedFormat ? selectedFormat.qualities : this.audioFormats[0].qualities;
     const exists = this.qualities.find(el => el.id === this.quality);
-    this.quality = exists ? this.quality : 'best';
-  }
-
-  refreshFormatOptions() {
-    if (this.downloadType === 'video') {
-      this.formatOptions = this.videoFormats;
-      return;
-    }
-    if (this.downloadType === 'audio') {
-      this.formatOptions = this.audioFormats;
-      return;
-    }
-    if (this.downloadType === 'captions') {
-      this.formatOptions = this.captionFormats;
-      return;
-    }
-    this.formatOptions = this.thumbnailFormats;
-  }
-
-  showCodecSelector() {
-    return this.downloadType === 'video';
-  }
-
-  showFormatSelector() {
-    return this.downloadType !== 'thumbnail';
-  }
-
-  showQualitySelector() {
-    if (this.downloadType === 'video') {
-      return this.format !== 'ios';
-    }
-    return this.downloadType === 'audio';
-  }
-
-  private normalizeSelectionsForType(resetForTypeChange = false) {
-    if (this.downloadType === 'video') {
-      const allowedFormats = new Set(this.videoFormats.map(f => f.id));
-      if (resetForTypeChange || !allowedFormats.has(this.format)) {
-        this.format = 'any';
-      }
-      const allowedCodecs = new Set(this.videoCodecs.map(c => c.id));
-      if (resetForTypeChange || !allowedCodecs.has(this.codec)) {
-        this.codec = 'auto';
-      }
-    } else if (this.downloadType === 'audio') {
-      const allowedFormats = new Set(this.audioFormats.map(f => f.id));
-      if (resetForTypeChange || !allowedFormats.has(this.format)) {
-        this.format = this.audioFormats[0].id;
-      }
-    } else if (this.downloadType === 'captions') {
-      const allowedFormats = new Set(this.captionFormats.map(f => f.id));
-      if (resetForTypeChange || !allowedFormats.has(this.format)) {
-        this.format = 'srt';
-      }
-      this.quality = 'best';
-    } else {
-      this.format = 'jpg';
-      this.quality = 'best';
-    }
-    this.cookieService.set('metube_format', this.format, { expires: this.settingsCookieExpiryDays });
-    this.cookieService.set('metube_codec', this.codec, { expires: this.settingsCookieExpiryDays });
-  }
-
-  private saveSelection(type: string) {
-    if (!type) return;
-    const selection = {
-      codec: this.codec,
-      format: this.format,
-      quality: this.quality,
-      subtitleLanguage: this.subtitleLanguage,
-      subtitleMode: this.subtitleMode,
-    };
-    this.selectionsByType[type] = selection;
-    this.cookieService.set(
-      this.selectionCookiePrefix + type,
-      JSON.stringify(selection),
-      { expires: this.settingsCookieExpiryDays }
-    );
-  }
-
-  private restoreSelection(type: string) {
-    const saved = this.selectionsByType[type];
-    if (!saved) return;
-    this.codec = saved.codec;
-    this.format = saved.format;
-    this.quality = saved.quality;
-    this.subtitleLanguage = saved.subtitleLanguage;
-    this.subtitleMode = saved.subtitleMode;
-  }
-
-  private loadSavedSelections() {
-    for (const type of this.downloadTypes.map(t => t.id)) {
-      const key = this.selectionCookiePrefix + type;
-      if (!this.cookieService.check(key)) continue;
-      try {
-        const raw = this.cookieService.get(key);
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          this.selectionsByType[type] = {
-            codec: String(parsed.codec ?? 'auto'),
-            format: String(parsed.format ?? ''),
-            quality: String(parsed.quality ?? 'best'),
-            subtitleLanguage: String(parsed.subtitleLanguage ?? 'en'),
-            subtitleMode: String(parsed.subtitleMode ?? 'prefer_manual'),
-          };
-        }
-      } catch {
-        // Ignore malformed cookie values.
-      }
-    }
+    this.quality = exists ? this.quality : this.qualities[0].id;
+    this.cookieService.set('metube_quality', this.quality, {
+      expires: this.settingsCookieExpiryDays,
+    });
   }
 
   private buildAddPayload(overrides: Partial<AddDownloadPayload> = {}): AddDownloadPayload {
     const allowYtdlOptionsOverrides = this.allowYtdlOptionsOverrides();
     return {
       url: overrides.url ?? this.addUrl,
-      downloadType: overrides.downloadType ?? this.downloadType,
-      codec: overrides.codec ?? this.codec,
       quality: overrides.quality ?? this.quality,
       format: overrides.format ?? this.format,
       folder: overrides.folder ?? this.folder,
@@ -1125,8 +526,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
       splitByChapters: overrides.splitByChapters ?? this.splitByChapters,
       sponsorblock: overrides.sponsorblock ?? this.sponsorblock,
       chapterTemplate: overrides.chapterTemplate ?? this.chapterTemplate,
-      subtitleLanguage: overrides.subtitleLanguage ?? this.subtitleLanguage,
-      subtitleMode: overrides.subtitleMode ?? this.subtitleMode,
       ytdlOptionsPresets: overrides.ytdlOptionsPresets ?? [...this.ytdlOptionsPresets],
       ytdlOptionsOverrides: allowYtdlOptionsOverrides
         ? (overrides.ytdlOptionsOverrides ?? this.ytdlOptionsOverrides)
@@ -1300,7 +699,7 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     let baseDir = this.downloads.configuration["PUBLIC_HOST_URL"];
     // Must match the server's directory rule exactly: ytdl.py writes to
     // AUDIO_DOWNLOAD_DIR on download_type alone. Treating any .mp3 as audio
-    // sent the link to audio_download/ for mp3s produced under a video-type
+    // sent the link to audio_download/ for MP3s produced under a legacy type
     // download (a postprocessor, a preset, or a legacy record), which the
     // server had written to DOWNLOAD_DIR -- a 404 whenever the two differ.
     if (download.download_type === 'audio') {
@@ -1552,15 +951,13 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     // eslint-disable-next-line no-useless-escape
     const baseUrl = `${window.location.origin}${window.location.pathname.replace(/\/[^\/]*$/, '/')}`;
     const versionUrl = `${baseUrl}version`;
-    this.http.get<{ 'yt-dlp': string, version: string }>(versionUrl)
+    this.http.get<{ 'yt-dlp': string }>(versionUrl)
       .subscribe({
         next: (data) => {
           this.ytDlpVersion = data['yt-dlp'];
-          this.metubeVersion = data.version;
         },
         error: () => {
           this.ytDlpVersion = null;
-          this.metubeVersion = null;
         }
       });
   }
@@ -1583,11 +980,6 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   toggleCompletedCollapsed() {
     this.completedCollapsed = !this.completedCollapsed;
     this.cookieService.set('metube_completed_collapsed', this.completedCollapsed ? 'true' : 'false', { expires: this.settingsCookieExpiryDays });
-  }
-
-  toggleSubscriptionsCollapsed() {
-    this.subscriptionsCollapsed = !this.subscriptionsCollapsed;
-    this.cookieService.set('metube_subscriptions_collapsed', this.subscriptionsCollapsed ? 'true' : 'false', { expires: this.settingsCookieExpiryDays });
   }
 
   private rebuildSortedDone() {

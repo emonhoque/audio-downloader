@@ -19,10 +19,8 @@ class MeTubeSocketStub {
 function basePayload(): SubscribePayload {
   return {
     url: 'https://example.com/channel',
-    downloadType: 'video',
-    codec: 'auto',
-    quality: 'best',
-    format: 'any',
+    quality: '320',
+    format: 'mp3',
     folder: '',
     customNamePrefix: '',
     playlistItemLimit: 0,
@@ -30,8 +28,6 @@ function basePayload(): SubscribePayload {
     splitByChapters: false,
     sponsorblock: false,
     chapterTemplate: '',
-    subtitleLanguage: 'en',
-    subtitleMode: 'prefer_manual',
     ytdlOptionsPresets: [],
     ytdlOptionsOverrides: '',
     clipStart: '',
@@ -72,6 +68,17 @@ describe('SubscriptionsService', () => {
     service.subscribe(basePayload()).subscribe();
     const req = httpMock.expectOne('subscribe');
     expect(req.request.body).toEqual(expect.objectContaining({ sponsorblock: false }));
+    req.flush({ status: 'ok' });
+  });
+
+  it('subscribe() sends audio settings without obsolete media fields', () => {
+    service.subscribe(basePayload()).subscribe();
+    const req = httpMock.expectOne('subscribe');
+    expect(req.request.body).toEqual(expect.objectContaining({ format: 'mp3', quality: '320' }));
+    expect(req.request.body['download_type']).toBeUndefined();
+    expect(req.request.body['codec']).toBeUndefined();
+    expect(req.request.body['subtitle_language']).toBeUndefined();
+    expect(req.request.body['subtitle_mode']).toBeUndefined();
     req.flush({ status: 'ok' });
   });
 });

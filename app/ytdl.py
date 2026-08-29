@@ -22,7 +22,16 @@ import yt_dlp.networking.impersonate
 from yt_dlp.postprocessor.common import PostProcessor
 from yt_dlp.utils import STR_FORMAT_RE_TMPL, STR_FORMAT_TYPES
 import bg_tasks
-from dl_formats import get_format, get_opts, AUDIO_FORMATS, merge_ytdl_option_layers
+from dl_formats import (
+    AUDIO_FORMATS,
+    DEFAULT_AUDIO_FORMAT,
+    DEFAULT_MP3_QUALITY,
+    coerce_legacy_audio_request,
+    get_format,
+    get_opts,
+    merge_ytdl_option_layers,
+    normalize_audio_request,
+)
 from music_metadata import MusicMetadataPreProcessor
 from datetime import datetime
 from state_store import AtomicJsonStore, from_json_compatible, read_legacy_shelf, to_json_compatible
@@ -558,8 +567,8 @@ class DownloadInfo:
                 elif old_quality == 'audio':
                     self.download_type = 'audio'
                     self.codec = 'auto'
-                    self.format = 'm4a'
-                    self.quality = 'best'
+                    self.format = DEFAULT_AUDIO_FORMAT
+                    self.quality = DEFAULT_MP3_QUALITY
             self.__dict__.pop('video_codec', None)
             self.__dict__.pop('subtitle_format', None)
 
@@ -718,13 +727,13 @@ class Download:
         self.allow_private = allow_private
         self.info = info
         self.format = get_format(
-            getattr(info, 'download_type', 'video'),
+            getattr(info, 'download_type', 'audio'),
             getattr(info, 'codec', 'auto'),
             format,
             quality,
         )
         self.ytdl_opts = get_opts(
-            getattr(info, 'download_type', 'video'),
+            getattr(info, 'download_type', 'audio'),
             getattr(info, 'codec', 'auto'),
             format,
             quality,
@@ -871,17 +880,22 @@ class Download:
             put_status_postprocessor = self._make_postprocessor_hook()
 
             ytdl_params = {
+                **self.ytdl_opts,
                 'quiet': not debug_logging,
                 'verbose': debug_logging,
                 'no_color': True,
                 'paths': {"home": self.download_dir, "temp": self.temp_dir},
                 'outtmpl': { "default": self.output_template, "chapter": self.output_template_chapter },
                 'format': self.format,
+                # Fork invariants: presets/global overrides may tune extraction,
+                # but may not restore a video selector, skip the media download,
+                # or retain the source video after FFmpegExtractAudio succeeds.
+                'skip_download': False,
+                'keepvideo': False,
                 'socket_timeout': 30,
                 'ignore_no_formats_error': True,
                 'progress_hooks': [put_status],
                 'postprocessor_hooks': [put_status_postprocessor],
-                **self.ytdl_opts,
             }
             # Set after the ytdl_opts merge: the failure messages below depend on
             # this logger, so a user-supplied one must not replace it.
@@ -991,7 +1005,7 @@ class Download:
     def _kill_if_alive(self):
         if self.running():
             log.info(f"Escalating cancel to SIGKILL for: {self.info.title}")
-            self._signal_group(signal.SIGKILL)
+            self._signal_group(getattr(signal, 'SIGKILL', signal.SIGTERM))
 
     def cancel(self):
         log.info(f"Cancelling download: {self.info.title}")
@@ -1163,7 +1177,12 @@ class PersistentQueue:
 
     def load(self):
         for k, v in self.saved_items():
-            self.dict[k] = Download(None, None, None, None, getattr(v, 'quality', 'best'), getattr(v, 'format', 'any'), {}, v)
+            _download_type, _codec, format, quality = coerce_legacy_audio_request(
+                getattr(v, 'download_type', None),
+                getattr(v, 'format', None),
+                getattr(v, 'quality', None),
+            )
+            self.dict[k] = Download(None, None, None, None, quality, format, {}, v)
 
     def exists(self, key):
         return key in self.dict
@@ -1616,6 +1635,16 @@ class DownloadQueue:
         return dldirectory, None
 
     async def __add_download(self, dl, auto_start):
+        (
+            dl.download_type,
+            dl.codec,
+            dl.format,
+            dl.quality,
+        ) = coerce_legacy_audio_request(
+            getattr(dl, 'download_type', None),
+            getattr(dl, 'format', None),
+            getattr(dl, 'quality', None),
+        )
         dldirectory, error_message = self.__calc_download_path(dl.download_type, dl.folder)
         if error_message is not None:
             return error_message
@@ -1988,6 +2017,9 @@ class DownloadQueue:
         retry_entry=None,
         sponsorblock=False,
     ):
+        download_type, codec, format, quality = normalize_audio_request(
+            download_type, format, quality
+        )
         if ytdl_options_presets is None:
             ytdl_options_presets = []
         log.info(
@@ -2073,13 +2105,18 @@ class DownloadQueue:
         # overrides or presets the current configuration no longer allows.
         overrides = info.ytdl_options_overrides if self.config.ALLOW_YTDL_OPTIONS_OVERRIDES else {}
         presets = [p for p in info.ytdl_options_presets if p in self.config.YTDL_OPTIONS_PRESETS]
+        download_type, codec, format, quality = coerce_legacy_audio_request(
+            getattr(info, 'download_type', None),
+            getattr(info, 'format', None),
+            getattr(info, 'quality', None),
+        )
 
         return await self.add(
             info.url,
-            info.download_type,
-            info.codec,
-            info.format,
-            info.quality,
+            download_type,
+            codec,
+            format,
+            quality,
             info.folder,
             info.custom_name_prefix,
             info.playlist_item_limit,
@@ -2117,6 +2154,9 @@ class DownloadQueue:
         clip_end=None,
         sponsorblock=False,
     ):
+        download_type, codec, format, quality = normalize_audio_request(
+            download_type, format, quality
+        )
         if ytdl_options_presets is None:
             ytdl_options_presets = []
         normalized_entry = copy.deepcopy(entry) if isinstance(entry, dict) else entry
@@ -2227,6 +2267,10 @@ class DownloadQueue:
         return (list((k, v.info) for k, v in self.queue.items()) +
                 list((k, v.info) for k, v in self.pending.items()),
                 list((k, v.info) for k, v in self.done.items()))
+
+    def has_active_downloads(self) -> bool:
+        """Return whether a worker is still writing media or postprocessing."""
+        return any(download.started() and download.running() for _, download in self.queue.items())
 
     def close(self):
         # Kill any still-running download subprocesses (and their ffmpeg

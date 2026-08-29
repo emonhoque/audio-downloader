@@ -22,6 +22,7 @@ class StateStoreTests(unittest.TestCase):
             self.assertEqual(payload["schema_version"], 2)
             self.assertEqual(payload["items"][0]["info"]["title"], "hello")
 
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits are not available on Windows")
     def test_save_falls_back_to_direct_write_when_mkstemp_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "queue.json")
@@ -41,6 +42,7 @@ class StateStoreTests(unittest.TestCase):
             payload = store.load()
             self.assertEqual(payload["items"], [{"key": "a"}])
 
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits are not available on Windows")
     def test_fallback_tightens_permissions_on_existing_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "queue.json")

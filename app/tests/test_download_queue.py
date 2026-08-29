@@ -6,6 +6,7 @@ import copy
 import os
 import re
 import tempfile
+import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -114,6 +115,11 @@ async def test_add_single_video_goes_to_pending_when_auto_start_false(dq_env):
         )
     assert result["status"] == "ok"
     assert dq.pending.exists("https://example.com/watch?v=1")
+    queued = dq.pending.get("https://example.com/watch?v=1")
+    assert queued.info.download_type == "audio"
+    assert queued.info.format == "mp3"
+    assert queued.info.quality == "320"
+    assert "bestvideo" not in queued.format
 
 
 @pytest.mark.asyncio
@@ -350,6 +356,63 @@ async def test_retry_restores_playlist_output_context(dq_env):
     assert queued.output_template == "My Playlist/%(title)s.%(ext)s"
     assert queued.info.entry["playlist_index"] == "01"
     assert queued.info.entry["playlist_title"] == "My Playlist"
+    assert queued.info.download_type == "audio"
+    assert queued.info.format == "mp3"
+    assert queued.info.quality == "320"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stored_type,stored_format,stored_quality,expected_format,expected_quality",
+    [
+        ("audio", "mp3", "320", "mp3", "320"),
+        ("audio", "m4a", "best", "m4a", "best"),
+        ("audio", "opus", "best", "opus", "best"),
+        ("audio", "flac", "best", "flac", "best"),
+        ("audio", "wav", "best", "wav", "best"),
+        ("video", "any", "best", "mp3", "320"),
+        ("captions", "srt", "best", "mp3", "320"),
+        ("audio", "invalid", "invalid", "mp3", "320"),
+        (None, None, None, "mp3", "320"),
+    ],
+)
+async def test_retry_preserves_explicit_audio_or_defaults_legacy_to_mp3(
+    dq_env,
+    stored_type,
+    stored_format,
+    stored_quality,
+    expected_format,
+    expected_quality,
+):
+    notifier = AsyncMock()
+    dq = DownloadQueue(dq_env, notifier)
+    url = "https://example.com/watch?v=retry"
+    info = _failed_playlist_item(url)
+    info.download_type = stored_type
+    info.format = stored_format
+    info.quality = stored_quality
+    await dq.done.put(types.SimpleNamespace(info=info))
+
+    def fake_extract(self, extracted_url, *_args, **_kwargs):
+        return {
+            "_type": "video",
+            "id": "retry",
+            "title": "Retry",
+            "url": extracted_url,
+            "webpage_url": extracted_url,
+        }
+
+    with patch.object(DownloadQueue, "_DownloadQueue__extract_info", fake_extract), patch.object(
+        DownloadQueue, "_DownloadQueue__start_download", new=AsyncMock()
+    ):
+        result = await dq.retry(url)
+
+    assert result["status"] == "ok"
+    queued = dq.queue.get(url)
+    assert queued.info.download_type == "audio"
+    assert queued.info.format == expected_format
+    assert queued.info.quality == expected_quality
+    assert "bestvideo" not in queued.format
 
 
 def _failed_playlist_item(url, **overrides):
@@ -526,7 +589,9 @@ async def test_add_entry_duplicate_while_pending_is_skipped_not_clobbered(dq_env
     assert "Already in queue" in second["msg"]
     # The original pending download's options must survive untouched.
     pending_dl = dq.pending.get("https://example.com/watch?v=1")
-    assert pending_dl.info.download_type == "video"
+    assert pending_dl.info.download_type == "audio"
+    assert pending_dl.info.format == "mp3"
+    assert pending_dl.info.quality == "320"
     assert pending_dl.info.title == "Original Title"
 
 

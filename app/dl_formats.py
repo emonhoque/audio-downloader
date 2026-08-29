@@ -1,7 +1,95 @@
 import copy
 
-AUDIO_FORMATS = ("m4a", "mp3", "opus", "wav", "flac")
-CAPTION_MODES = ("auto_only", "manual_only", "prefer_manual", "prefer_auto")
+DEFAULT_AUDIO_FORMAT = "mp3"
+DEFAULT_MP3_QUALITY = "320"
+AUDIO_FORMATS = ("mp3", "m4a", "opus", "flac", "wav")
+AUDIO_QUALITIES = {
+    "mp3": frozenset(("320", "192", "128", "best")),
+    "m4a": frozenset(("192", "128", "best")),
+    "opus": frozenset(("best",)),
+    "flac": frozenset(("best",)),
+    "wav": frozenset(("best",)),
+}
+_LEGACY_DOWNLOAD_TYPES = frozenset(("video", "captions", "thumbnail"))
+_LEGACY_NON_AUDIO_FORMATS = frozenset(
+    (
+        "",
+        "any",
+        "mp4",
+        "ios",
+        "thumbnail",
+        "captions",
+        "jpg",
+        "srt",
+        "txt",
+        "vtt",
+        "ttml",
+        "sbv",
+        "scc",
+        "dfxp",
+    )
+)
+
+
+def normalize_audio_request(
+    download_type: str | None,
+    format: str | None,
+    quality: str | None,
+) -> tuple[str, str, str, str]:
+    """Return the authoritative audio-only settings for a new download.
+
+    Supported explicit audio choices are preserved only when the request is
+    already audio, or when the legacy schema omitted ``download_type`` and put
+    an audio format directly in ``format``. Every obsolete video, captions, or
+    thumbnail request becomes the product default instead of resurrecting the
+    old media modes.
+    """
+    requested_type = str(download_type or "").strip().lower()
+    requested_format = str(format or "").strip().lower()
+    requested_quality = str(quality or "").strip().lower()
+
+    if requested_type not in {"", "audio", *_LEGACY_DOWNLOAD_TYPES}:
+        raise ValueError(f"Unknown download_type {requested_type}")
+
+    explicit_audio_format = requested_type == "audio" or (
+        requested_type == "" and requested_format in AUDIO_FORMATS
+    )
+    if explicit_audio_format:
+        normalized_format = requested_format or DEFAULT_AUDIO_FORMAT
+        if normalized_format not in AUDIO_FORMATS:
+            raise ValueError(f"Unknown audio format {normalized_format}")
+    else:
+        if requested_type == "" and requested_format not in _LEGACY_NON_AUDIO_FORMATS:
+            raise ValueError(f"Unknown audio format {requested_format}")
+        normalized_format = DEFAULT_AUDIO_FORMAT
+
+    if not explicit_audio_format:
+        normalized_quality = DEFAULT_MP3_QUALITY
+    elif requested_quality:
+        normalized_quality = requested_quality
+    elif normalized_format == DEFAULT_AUDIO_FORMAT:
+        normalized_quality = DEFAULT_MP3_QUALITY
+    else:
+        normalized_quality = "best"
+
+    if normalized_quality not in AUDIO_QUALITIES[normalized_format]:
+        raise ValueError(
+            f"Unknown audio quality {normalized_quality} for format {normalized_format}"
+        )
+
+    return "audio", "auto", normalized_format, normalized_quality
+
+
+def coerce_legacy_audio_request(
+    download_type: str | None,
+    format: str | None,
+    quality: str | None,
+) -> tuple[str, str, str, str]:
+    """Normalize persisted legacy settings, falling back safely to MP3."""
+    try:
+        return normalize_audio_request(download_type, format, quality)
+    except ValueError:
+        return "audio", "auto", DEFAULT_AUDIO_FORMAT, DEFAULT_MP3_QUALITY
 
 
 def merge_ytdl_option_layers(presets, overrides, presets_config) -> dict:
@@ -18,79 +106,13 @@ def merge_ytdl_option_layers(presets, overrides, presets_config) -> dict:
     merged.update(overrides or {})
     return merged
 
-CODEC_FILTER_MAP = {
-    'h264': "[vcodec~='^(h264|avc)']",
-    'h265': "[vcodec~='^(h265|hevc)']",
-    'av1':  "[vcodec~='^av0?1']",
-    'vp9':  "[vcodec~='^vp0?9']",
-}
-
-
-def _normalize_caption_mode(mode: str) -> str:
-    mode = (mode or "").strip()
-    return mode if mode in CAPTION_MODES else "prefer_manual"
-
-
-def _normalize_subtitle_language(language: str) -> str:
-    language = (language or "").strip()
-    return language or "en"
-
 
 def get_format(download_type: str, codec: str, format: str, quality: str) -> str:
-    """
-    Returns yt-dlp format selector.
-
-    Args:
-      download_type (str): selected content type (video, audio, captions, thumbnail)
-      codec (str): selected video codec (auto, h264, h265, av1, vp9)
-      format (str): selected output format/profile for type
-      quality (str): selected quality
-
-    Raises:
-      Exception: unknown type/format
-
-    Returns:
-      str: yt-dlp format selector
-    """
-    download_type = (download_type or "video").strip().lower()
-    format = (format or "any").strip().lower()
-    codec = (codec or "auto").strip().lower()
-    quality = (quality or "best").strip().lower()
-
-    if format.startswith("custom:"):
-        # Unreachable via the HTTP API (format is validated against a fixed
-        # set in main.py), but legacy persisted downloads may carry a
-        # custom: format from before that validation existed; removing this
-        # would crash PersistentQueue.load() for those records.
-        return format[7:]
-
-    if download_type == "thumbnail":
-        return "bestaudio/best"
-
-    if download_type == "captions":
-        return "bestaudio/best"
-
-    if download_type == "audio":
-        if format not in AUDIO_FORMATS:
-            raise ValueError(f"Unknown audio format {format}")
-        return f"bestaudio[ext={format}]/bestaudio/best"
-
-    if download_type == "video":
-        if format not in ("any", "mp4", "ios"):
-            raise ValueError(f"Unknown video format {format}")
-        vfmt, afmt = ("[ext=mp4]", "[ext=m4a]") if format in ("mp4", "ios") else ("", "")
-        vres = f"[height<={quality}]" if quality not in ("best", "worst") else ""
-        vcombo = vres + vfmt
-        codec_filter = CODEC_FILTER_MAP.get(codec, "")
-
-        if format == "ios":
-            return f"bestvideo[vcodec~='^((he|a)vc|h26[45])']{vres}+bestaudio[acodec=aac]/bestvideo[vcodec~='^((he|a)vc|h26[45])']{vres}+bestaudio{afmt}/bestvideo{vcombo}+bestaudio{afmt}/best{vcombo}"
-
-        if codec_filter:
-            return f"bestvideo{codec_filter}{vcombo}+bestaudio{afmt}/bestvideo{vcombo}+bestaudio{afmt}/best{vcombo}"
-        return f"bestvideo{vcombo}+bestaudio{afmt}/best{vcombo}"
-
-    raise ValueError(f"Unknown download_type {download_type}")
+    """Return the best source-audio selector for the normalized request."""
+    _download_type, _codec, normalized_format, _quality = normalize_audio_request(
+        download_type, format, quality
+    )
+    return f"bestaudio[ext={normalized_format}]/bestaudio/best"
 
 
 def get_opts(
@@ -102,92 +124,32 @@ def get_opts(
     subtitle_language: str = "en",
     subtitle_mode: str = "prefer_manual",
 ) -> dict:
-    """
-    Returns extra yt-dlp options/postprocessors.
-
-    Args:
-      download_type (str): selected content type
-      codec (str): selected codec (unused currently, kept for API consistency)
-      format (str): selected format/profile
-      quality (str): selected quality
-      ytdl_opts (dict): current options selected
-
-    Returns:
-      dict: extended options
-    """
-    download_type = (download_type or "video").strip().lower()
-    format = (format or "any").strip().lower()
+    """Add mandatory FFmpeg audio extraction and useful artwork metadata."""
+    del subtitle_language, subtitle_mode
+    _download_type, _codec, format, quality = normalize_audio_request(
+        download_type, format, quality
+    )
     opts = copy.deepcopy(ytdl_opts)
 
-    postprocessors = []
+    postprocessors = [
+        {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": format,
+            "preferredquality": 0 if quality == "best" else quality,
+        }
+    ]
 
-    if download_type == "audio":
-        postprocessors.append(
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": format,
-                "preferredquality": 0 if quality == "best" else quality,
-            }
-        )
-
-        if format != "wav" and "writethumbnail" not in opts:
-            opts["writethumbnail"] = True
-            postprocessors.append(
-                {
-                    "key": "FFmpegThumbnailsConvertor",
-                    "format": "jpg",
-                    "when": "before_dl",
-                }
-            )
-            postprocessors.append({"key": "FFmpegMetadata"})
-            postprocessors.append({"key": "EmbedThumbnail"})
-
-    if download_type == "thumbnail":
-        opts["skip_download"] = True
+    if format != "wav" and "writethumbnail" not in opts:
         opts["writethumbnail"] = True
         postprocessors.append(
-            {"key": "FFmpegThumbnailsConvertor", "format": "jpg", "when": "before_dl"}
+            {
+                "key": "FFmpegThumbnailsConvertor",
+                "format": "jpg",
+                "when": "before_dl",
+            }
         )
-
-    if download_type == "captions":
-        mode = _normalize_caption_mode(subtitle_mode)
-        language = _normalize_subtitle_language(subtitle_language)
-        opts["skip_download"] = True
-        requested_subtitle_format = (format or "srt").lower()
-        if requested_subtitle_format == "txt":
-            requested_subtitle_format = "srt"
-        opts["subtitlesformat"] = f"{requested_subtitle_format}/best"
-        if requested_subtitle_format in ("srt", "vtt"):
-            # subtitlesformat above is only a preference: if the extractor
-            # doesn't natively offer this ext (e.g. YouTube has no native srt),
-            # yt-dlp silently falls back to whatever it has. ffmpeg can only
-            # convert to srt/vtt/ass/lrc, so only guarantee the requested
-            # container for those; other formats stay best-effort.
-            postprocessors.append(
-                {
-                    "key": "FFmpegSubtitlesConvertor",
-                    "format": requested_subtitle_format,
-                    "when": "before_dl",
-                }
-            )
-        if mode == "manual_only":
-            opts["writesubtitles"] = True
-            opts["writeautomaticsub"] = False
-            opts["subtitleslangs"] = [language]
-        elif mode == "auto_only":
-            opts["writesubtitles"] = False
-            opts["writeautomaticsub"] = True
-            # `-orig` captures common YouTube auto-sub tags. The plain language
-            # fallback keeps behavior useful across other extractors.
-            opts["subtitleslangs"] = [f"{language}-orig", language]
-        elif mode == "prefer_auto":
-            opts["writesubtitles"] = True
-            opts["writeautomaticsub"] = True
-            opts["subtitleslangs"] = [f"{language}-orig", language]
-        else:
-            opts["writesubtitles"] = True
-            opts["writeautomaticsub"] = True
-            opts["subtitleslangs"] = [language, f"{language}-orig"]
+        postprocessors.append({"key": "FFmpegMetadata"})
+        postprocessors.append({"key": "EmbedThumbnail"})
 
     opts["postprocessors"] = postprocessors + (
         opts["postprocessors"] if "postprocessors" in opts else []

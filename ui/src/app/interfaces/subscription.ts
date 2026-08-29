@@ -5,7 +5,6 @@ export interface SubscriptionRow {
   enabled: boolean;
   check_interval_minutes: number;
   download_type: string;
-  codec: string;
   format: string;
   quality: string;
   folder: string;
