@@ -12,10 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       -
-        name: Checkout
+        name: Checkout (AUTOUPDATE_PAT)
+        if: ${{ secrets.AUTOUPDATE_PAT != '' }}
         uses: actions/checkout@v7
         with:
-          token: ${{ secrets.AUTOUPDATE_PAT || github.token }}
+          token: ${{ secrets.AUTOUPDATE_PAT }}
+      -
+        name: Checkout (GITHUB_TOKEN fallback)
+        if: ${{ secrets.AUTOUPDATE_PAT == '' }}
+        uses: actions/checkout@v7
+        with:
+          token: ${{ github.token }}
       -
         name: Set up Python
         uses: actions/setup-python@v7
