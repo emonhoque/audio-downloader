@@ -1,44 +1,78 @@
 name: update-yt-dlp
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
-  update-yt-dlp :
+  update-yt-dlp:
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v7
-        with:
-          token: ${{ secrets.AUTOUPDATE_PAT || github.token }}
-      -
-        name: Set up Python
+
+      - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      -
-        name: Install uv
+
+      - name: Install uv
         uses: astral-sh/setup-uv@v7
-      -
-        name: Update yt-dlp
+
+      - name: Update yt-dlp
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
           uv sync --locked
-          # Check if yt-dlp has updates available
-          LATEST_VERSION=$(uv pip list --outdated --format json | jq -r '.[] | select(.name == "yt-dlp") | .latest_version')
-          CURRENT_VERSION=$(uv pip list --format json | jq -r '.[] | select(.name == "yt-dlp") | .version')
-          if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
-            echo "Updating yt-dlp from $CURRENT_VERSION to $LATEST_VERSION"
-            uv lock --upgrade-package "yt-dlp[default,curl-cffi]"
-            git config --global user.email "updater@metube"
-            git config --global user.name "AutoUpdater"
-            git add uv.lock
-            git commit -m "upgrade yt-dlp from $CURRENT_VERSION to $LATEST_VERSION"
-            git push
-          else
+
+          CURRENT_VERSION=$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path('uv.lock').read_text())
+          for package in data.get('package', []):
+              if package.get('name') == 'yt-dlp':
+                  print(package['version'])
+                  break
+          else:
+              raise SystemExit('yt-dlp is not present in uv.lock')
+          PY
+          )
+
+          uv lock --upgrade-package 'yt-dlp[default,curl-cffi]'
+
+          if git diff --quiet -- uv.lock; then
             echo "yt-dlp is already up to date ($CURRENT_VERSION)"
+            exit 0
           fi
+
+          NEW_VERSION=$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path('uv.lock').read_text())
+          for package in data.get('package', []):
+              if package.get('name') == 'yt-dlp':
+                  print(package['version'])
+                  break
+          else:
+              raise SystemExit('yt-dlp is not present in uv.lock')
+          PY
+          )
+
+          echo "Updating yt-dlp from $CURRENT_VERSION to $NEW_VERSION"
+          git config user.email 'updater@metube'
+          git config user.name 'AutoUpdater'
+          git add uv.lock
+          git commit -m "upgrade yt-dlp from $CURRENT_VERSION to $NEW_VERSION"
+          git push origin HEAD:master
+
+          echo 'Dispatching image build for updated master'
+          gh workflow run main.yml --ref master
