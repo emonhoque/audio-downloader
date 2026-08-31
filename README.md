@@ -206,11 +206,14 @@ This mechanism cannot report a host or container that never started. Use an exte
 
 ### Use the published image
 
+Images are published as `ghcr.io/emonhoque/audio-downloader:latest` and the dated
+release tag `ghcr.io/emonhoque/audio-downloader:2026.08.31`.
+
 ```yaml
 services:
-  metube:
-    image: ghcr.io/emonhoque/metube:latest
-    container_name: metube-audio
+  audio-downloader:
+    image: ghcr.io/emonhoque/audio-downloader:latest
+    container_name: audio-downloader
     restart: unless-stopped
     ports:
       - "8081:8081"
@@ -231,16 +234,16 @@ http://localhost:8081
 ### Build locally
 
 ```bash
-docker build -t metube-audio:local .
+docker build -t audio-downloader:local .
 ```
 
 ```bash
 docker run -d \
-  --name metube-audio \
+  --name audio-downloader \
   --restart unless-stopped \
   -p 8081:8081 \
   -v /path/to/downloads:/downloads \
-  metube-audio:local
+  audio-downloader:local
 ```
 
 The image is built with a Node 22 frontend stage and a Python 3.13 runtime. It includes FFmpeg, yt-dlp, Deno, aria2, the BgUtils POT provider, `tini`, and `gosu`.
@@ -378,7 +381,7 @@ uv run pytest app/tests/
 ### Complete image
 
 ```bash
-docker build -t metube-audio:test .
+docker build -t audio-downloader:test .
 ```
 
 The main GitHub Actions workflow performs frontend linting, frontend build and tests, Python compilation, backend tests, and a Trivy filesystem scan before publishing a multi-architecture image.
