@@ -16,6 +16,9 @@ RUN CI=true pnpm install && pnpm run build
 
 FROM python:3.13-slim
 
+LABEL org.opencontainers.image.title="Audio Downloader" \
+      org.opencontainers.image.source="https://github.com/emonhoque/audio-downloader"
+
 WORKDIR /app
 
 COPY pyproject.toml uv.lock docker-entrypoint.sh ./
