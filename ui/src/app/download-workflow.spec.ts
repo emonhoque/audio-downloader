@@ -142,27 +142,29 @@ describe('compact download workflow', () => {
     }).compileComponents();
   });
 
-  it('only shows the downloading section while queue work exists', () => {
+  it('shows queue work inside History instead of a separate downloading section', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
 
-    const activeSection = () =>
-      (fixture.nativeElement as HTMLElement).querySelector('.active-download-section');
-
-    expect(activeSection()?.classList.contains('d-none')).toBe(true);
+    const root = () => fixture.nativeElement as HTMLElement;
+    expect(root().querySelector('.active-download-section')).toBeNull();
+    expect(root().querySelector('.active-history-entry')).toBeNull();
 
     downloads.queue.set('audio1', makeDownload('postprocessing'));
     downloads.queueChanged.next();
     fixture.detectChanges();
 
-    expect(activeSection()?.classList.contains('d-none')).toBe(false);
-    expect(activeSection()?.textContent).toContain('Post-processing');
+    const activeRow = root().querySelector('.active-history-entry');
+    expect(root().querySelector('.active-download-section')).toBeNull();
+    expect(activeRow).not.toBeNull();
+    expect(activeRow?.textContent).toContain('Post-processing');
+    expect(activeRow?.querySelector('.history-live-progress')).not.toBeNull();
 
     downloads.queue.clear();
     downloads.queueChanged.next();
     fixture.detectChanges();
 
-    expect(activeSection()?.classList.contains('d-none')).toBe(true);
+    expect(root().querySelector('.active-history-entry')).toBeNull();
   });
 
   it('makes file download primary and moves secondary row actions behind overflow', () => {

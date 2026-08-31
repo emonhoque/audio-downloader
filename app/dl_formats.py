@@ -1,7 +1,7 @@
 import copy
 
 DEFAULT_AUDIO_FORMAT = "mp3"
-DEFAULT_MP3_QUALITY = "320"
+DEFAULT_MP3_QUALITY = "best"
 AUDIO_FORMATS = ("mp3", "m4a", "opus", "flac", "wav")
 AUDIO_QUALITIES = {
     "mp3": frozenset(("320", "192", "128", "best")),

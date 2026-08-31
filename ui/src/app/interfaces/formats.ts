@@ -14,6 +14,7 @@ export const AUDIO_FORMATS: AudioFormatOption[] = [
     id: 'mp3',
     text: 'MP3',
     qualities: [
+      { id: 'best', text: 'Best' },
       { id: '320', text: '320 kbps' },
       { id: '192', text: '192 kbps' },
       { id: '128', text: '128 kbps' },

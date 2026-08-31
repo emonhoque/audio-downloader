@@ -118,14 +118,110 @@ async def test_add_single_video_goes_to_pending_when_auto_start_false(dq_env):
     queued = dq.pending.get("https://example.com/watch?v=1")
     assert queued.info.download_type == "audio"
     assert queued.info.format == "mp3"
-    assert queued.info.quality == "320"
+    assert queued.info.quality == "best"
     assert "bestvideo" not in queued.format
 
 
 @pytest.mark.asyncio
-async def test_add_unsupported_url_recorded_as_failed_entry(dq_env):
-    """An unsupported/unextractable URL must show up as a red-cross entry in the
-    done list, not just a transient toast and a server log line."""
+async def test_existing_output_file_is_authoritative_even_if_history_is_missing(dq_env):
+    notifier = AsyncMock()
+    url = "https://www.youtube.com/watch?v=vid1"
+    output = os.path.join(dq_env.DOWNLOAD_DIR, "Test Video.mp3")
+    with open(output, "wb") as f:
+        f.write(b"already here")
+
+    def fake_extract(self, url, *_args, **_kwargs):
+        return {
+            "_type": "video",
+            "extractor_key": "Youtube",
+            "id": "vid1",
+            "title": "Test Video",
+            "url": url,
+            "webpage_url": url,
+        }
+
+    dq = DownloadQueue(dq_env, notifier)
+    with patch.object(DownloadQueue, "_DownloadQueue__extract_info", fake_extract), \
+         patch.object(DownloadQueue, "_DownloadQueue__start_download", new=AsyncMock()) as start:
+        result = await dq.add(
+            url, "audio", "auto", "mp3", "best", "", "", 0, auto_start=True,
+        )
+
+    assert result == {"status": "ok", "msg": "Already downloaded: file exists on server."}
+    assert not dq.queue.exists(url)
+    assert dq.done.exists(url)
+    existing = dq.done.get(url).info
+    assert existing.status == "finished"
+    assert existing.filename == "Test Video.mp3"
+    assert existing.size == len(b"already here")
+    start.assert_not_awaited()
+    notifier.completed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stale_download_archive_is_ignored_when_output_file_is_missing(dq_env):
+    notifier = AsyncMock()
+    url = "https://www.youtube.com/watch?v=vid1"
+    archive = os.path.join(dq_env.STATE_DIR, "downloaded.txt")
+    with open(archive, "w", encoding="utf-8") as f:
+        f.write("youtube vid1\n")
+    dq_env.YTDL_OPTIONS = {"download_archive": archive}
+
+    def fake_extract(self, url, *_args, **_kwargs):
+        return {
+            "_type": "video",
+            "extractor_key": "Youtube",
+            "id": "vid1",
+            "title": "Test Video",
+            "url": url,
+            "webpage_url": url,
+        }
+
+    dq = DownloadQueue(dq_env, notifier)
+    with patch.object(DownloadQueue, "_DownloadQueue__extract_info", fake_extract):
+        result = await dq.add(
+            url, "audio", "auto", "mp3", "best", "", "", 0, auto_start=False,
+        )
+
+    assert result["status"] == "ok"
+    assert dq.pending.exists(url)
+    pending = dq.pending.get(url)
+    assert "download_archive" not in pending.ytdl_opts
+    assert not os.path.exists(os.path.join(dq_env.DOWNLOAD_DIR, "Test Video.mp3"))
+
+
+@pytest.mark.asyncio
+async def test_non_stale_archive_config_is_kept_for_new_downloads(dq_env):
+    notifier = AsyncMock()
+    url = "https://www.youtube.com/watch?v=vid2"
+    archive = os.path.join(dq_env.STATE_DIR, "downloaded.txt")
+    with open(archive, "w", encoding="utf-8") as f:
+        f.write("youtube other-id\n")
+    dq_env.YTDL_OPTIONS = {"download_archive": archive}
+
+    def fake_extract(self, url, *_args, **_kwargs):
+        return {
+            "_type": "video",
+            "extractor_key": "Youtube",
+            "id": "vid2",
+            "title": "Another Video",
+            "url": url,
+            "webpage_url": url,
+        }
+
+    dq = DownloadQueue(dq_env, notifier)
+    with patch.object(DownloadQueue, "_DownloadQueue__extract_info", fake_extract):
+        result = await dq.add(
+            url, "audio", "auto", "mp3", "best", "", "", 0, auto_start=False,
+        )
+
+    assert result["status"] == "ok"
+    pending = dq.pending.get(url)
+    assert pending.ytdl_opts.get("download_archive") == archive
+
+
+@pytest.mark.asyncio
+async def test_add_unsupported_url_is_rejected_without_history_or_notification(dq_env):
     import ytdl
 
     notifier = AsyncMock()
@@ -139,22 +235,38 @@ async def test_add_unsupported_url_recorded_as_failed_entry(dq_env):
         result = await dq.add(
             url, "video", "auto", "any", "best", "", "", 0, auto_start=True,
         )
+
     assert result["status"] == "error"
-    assert dq.done.exists(url)
-    failed = dq.done.get(url)
-    assert failed.info.status == "error"
-    assert failed.info.error == result["msg"]
-    assert failed.info.url == url
-    # The full URL stays in .url/.error for the detail panel; the display
-    # title is shortened to the hostname so the Completed row stays readable.
-    assert failed.info.title == "example.com"
-    notifier.completed.assert_awaited()
+    assert not dq.done.exists(url)
+    assert not dq.queue.exists(url)
+    assert not dq.pending.exists(url)
+    notifier.completed.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_add_ssrf_rejected_url_recorded_as_failed_entry(dq_env):
-    """A URL rejected by the SSRF guard (before yt-dlp ever runs) must also
-    surface as a failed entry, not just an error status returned to the caller."""
+async def test_add_empty_extraction_is_rejected_without_history_or_notification(dq_env):
+    notifier = AsyncMock()
+    url = "https://example.com/skipped"
+
+    def empty_extract(self, url, *_args, **_kwargs):
+        return None
+
+    dq = DownloadQueue(dq_env, notifier)
+    with patch.object(DownloadQueue, "_DownloadQueue__extract_info", empty_extract):
+        result = await dq.add(
+            url, "audio", "auto", "mp3", "best", "", "", 0, auto_start=True,
+        )
+
+    assert result["status"] == "error"
+    assert "no media metadata" in result["msg"]
+    assert not dq.done.exists(url)
+    assert not dq.queue.exists(url)
+    assert not dq.pending.exists(url)
+    notifier.completed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_add_ssrf_rejected_url_is_rejected_without_history_or_notification(dq_env):
     notifier = AsyncMock()
     url = "file:///etc/passwd"
 
@@ -162,12 +274,12 @@ async def test_add_ssrf_rejected_url_recorded_as_failed_entry(dq_env):
     result = await dq.add(
         url, "video", "auto", "any", "best", "", "", 0, auto_start=True,
     )
+
     assert result["status"] == "error"
-    assert dq.done.exists(url)
-    failed = dq.done.get(url)
-    assert failed.info.status == "error"
-    assert failed.info.error == result["msg"]
-    notifier.completed.assert_awaited()
+    assert not dq.done.exists(url)
+    assert not dq.queue.exists(url)
+    assert not dq.pending.exists(url)
+    notifier.completed.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -358,7 +470,7 @@ async def test_retry_restores_playlist_output_context(dq_env):
     assert queued.info.entry["playlist_title"] == "My Playlist"
     assert queued.info.download_type == "audio"
     assert queued.info.format == "mp3"
-    assert queued.info.quality == "320"
+    assert queued.info.quality == "best"
 
 
 @pytest.mark.asyncio
@@ -370,10 +482,10 @@ async def test_retry_restores_playlist_output_context(dq_env):
         ("audio", "opus", "best", "opus", "best"),
         ("audio", "flac", "best", "flac", "best"),
         ("audio", "wav", "best", "wav", "best"),
-        ("video", "any", "best", "mp3", "320"),
-        ("captions", "srt", "best", "mp3", "320"),
-        ("audio", "invalid", "invalid", "mp3", "320"),
-        (None, None, None, "mp3", "320"),
+        ("video", "any", "best", "mp3", "best"),
+        ("captions", "srt", "best", "mp3", "best"),
+        ("audio", "invalid", "invalid", "mp3", "best"),
+        (None, None, None, "mp3", "best"),
     ],
 )
 async def test_retry_preserves_explicit_audio_or_defaults_legacy_to_mp3(
@@ -591,7 +703,7 @@ async def test_add_entry_duplicate_while_pending_is_skipped_not_clobbered(dq_env
     pending_dl = dq.pending.get("https://example.com/watch?v=1")
     assert pending_dl.info.download_type == "audio"
     assert pending_dl.info.format == "mp3"
-    assert pending_dl.info.quality == "320"
+    assert pending_dl.info.quality == "best"
     assert pending_dl.info.title == "Original Title"
 
 
@@ -873,7 +985,7 @@ async def test_extract_info_preset_null_download_archive_overrides_global(dq_env
         )
 
     assert result["status"] == "ok"
-    assert len(captured_params) == 1
+    assert captured_params
     extract_params = captured_params[0]
     assert extract_params.get("download_archive") is None
     assert extract_params["extract_flat"] is True

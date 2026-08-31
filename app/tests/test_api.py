@@ -213,7 +213,7 @@ async def test_add_obsolete_caption_fields_are_ignored_and_forced_to_audio(mock_
     response = await main.add(req)
     assert response.status == 200
     call = mock_dqueue.add.await_args
-    assert call.args[1:5] == ("audio", "auto", "mp3", "320")
+    assert call.args[1:5] == ("audio", "auto", "mp3", "best")
 
 
 @pytest.mark.asyncio
@@ -497,7 +497,7 @@ async def test_subscribe_legacy_non_media_request_becomes_clipped_audio(mock_dqu
     assert kwargs["download_type"] == "audio"
     assert kwargs["codec"] == "auto"
     assert kwargs["format"] == "mp3"
-    assert kwargs["quality"] == "320"
+    assert kwargs["quality"] == "best"
     assert kwargs["clip_start"] == pytest.approx(10.0)
 
 

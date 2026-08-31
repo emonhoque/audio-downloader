@@ -11,6 +11,8 @@ import { ToastService } from '../services/toast.service';
 <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;" aria-live="polite" aria-atomic="true">
   @for (toast of toasts.toasts(); track toast.id) {
     <div class="toast show align-items-center border-0 mb-2"
+      [class.confirmation-toast]="!!toast.actions"
+      [class.notification-toast]="!toast.actions"
       [class.text-bg-danger]="toast.level === 'error'"
       [class.text-bg-success]="toast.level === 'success'"
       [class.text-bg-primary]="toast.level === 'info'"
@@ -32,7 +34,7 @@ import { ToastService } from '../services/toast.service';
         }
       </div>
       @if (toast.actions) {
-        <div class="d-flex justify-content-end gap-2 px-3 pb-2">
+        <div class="confirmation-actions">
           @for (action of toast.actions; track action.label) {
             <button type="button"
               class="btn btn-sm"
@@ -48,6 +50,41 @@ import { ToastService } from '../services/toast.service';
   }
 </div>
 `,
+  styles: `
+    .confirmation-toast {
+      position: fixed;
+      z-index: 1110;
+      right: auto;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      left: 50%;
+      width: min(380px, calc(100vw - 24px));
+      max-width: none;
+      margin: 0 !important;
+      transform: translateX(-50%);
+      border-radius: 8px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, .28);
+    }
+
+    .confirmation-toast .toast-body {
+      min-width: 0;
+      padding: 14px 14px 10px;
+      line-height: 1.4;
+    }
+
+    .confirmation-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 0 14px 14px;
+    }
+
+    .confirmation-actions .btn {
+      min-height: 34px;
+      padding: 0 10px;
+      white-space: nowrap;
+    }
+  `,
 })
 export class ToastContainerComponent {
   protected readonly toasts = inject(ToastService);

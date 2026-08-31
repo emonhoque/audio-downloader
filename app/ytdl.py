@@ -751,6 +751,72 @@ class Download:
         self.notifier = None
         self._executor = None
 
+    def expected_output_path(self):
+        """Return the final requested media path without touching the network."""
+        entry = getattr(self.info, 'entry', None)
+        if not self.download_dir or not self.output_template or not isinstance(entry, dict):
+            return None
+
+        predicted = copy.deepcopy(entry)
+        final_ext = getattr(self.info, 'format', None)
+        if isinstance(final_ext, str) and final_ext:
+            predicted['ext'] = final_ext
+
+        params = {
+            **self.ytdl_opts,
+            'quiet': True,
+            'no_color': True,
+            'paths': {"home": self.download_dir, "temp": self.temp_dir},
+            'outtmpl': {
+                'default': self.output_template,
+                'chapter': self.output_template_chapter,
+            },
+        }
+        try:
+            filename = yt_dlp.YoutubeDL(params=params).prepare_filename(predicted)
+        except Exception as exc:
+            log.debug('Could not predict output path for %s: %s', self.info.url, exc)
+            return None
+        if not filename:
+            return None
+        if not os.path.isabs(filename):
+            filename = os.path.join(self.download_dir, filename)
+        real_base = os.path.realpath(self.download_dir)
+        real_filename = os.path.realpath(filename)
+        if not _is_within_directory(real_base, real_filename):
+            log.warning('Predicted output for %s resolves outside download directory', self.info.url)
+            return None
+        return real_filename
+
+    def archive_marks_downloaded(self):
+        archive = self.ytdl_opts.get('download_archive')
+        entry = getattr(self.info, 'entry', None)
+        if not archive or not isinstance(entry, dict):
+            return False
+        try:
+            params = {
+                'quiet': True,
+                'no_color': True,
+                'download_archive': archive,
+            }
+            return bool(yt_dlp.YoutubeDL(params=params).in_download_archive(entry))
+        except Exception as exc:
+            log.debug('Could not inspect download archive for %s: %s', self.info.url, exc)
+            return False
+
+    def reconcile_download_archive_with_disk(self):
+        """Use the real output file as truth, never a stale archive line."""
+        expected = self.expected_output_path()
+        if expected is not None and os.path.isfile(expected):
+            return expected
+        if self.archive_marks_downloaded():
+            self.ytdl_opts.pop('download_archive', None)
+            log.info(
+                'Ignoring stale download archive entry because output file is missing: %s',
+                self.info.url,
+            )
+        return None
+
     # Minimum interval between forwarded 'downloading' progress ticks. yt-dlp
     # emits these many times per second; without throttling, each active
     # download broadcasts hundreds of socket.io events/sec to every client.
@@ -944,7 +1010,17 @@ class Download:
 
             ret = self._make_youtube_dl(ytdl_params).download([self.info.url])
             if ret == 0:
-                self.status_queue.put({'status': 'finished'})
+                expected = self.expected_output_path()
+                if (
+                    expected is not None
+                    and not os.path.isfile(expected)
+                    and not getattr(self.info, 'split_by_chapters', False)
+                ):
+                    msg = 'yt-dlp exited successfully but the requested output file was not created.'
+                    log.error('%s URL=%s expected=%s', msg, self.info.url, expected)
+                    self.status_queue.put({'status': 'error', 'msg': msg})
+                else:
+                    self.status_queue.put({'status': 'finished'})
             else:
                 msg = '\n'.join(ytdl_logger.warnings) or f'yt-dlp failed with exit code {ret}'
                 self.status_queue.put({'status': 'error', 'msg': msg})
@@ -1594,8 +1670,14 @@ class DownloadQueue:
         # docstring for why the guard can't be installed process-wide.
         debug_logging = logging.getLogger().isEnabledFor(logging.DEBUG)
         user_opts = self._build_ytdl_options(ytdl_options_presets, ytdl_options_overrides)
+        classification_opts = dict(user_opts)
+        # download_archive is a download-time deduplication mechanism. During the
+        # metadata/classification pass it can make yt-dlp return None, which used
+        # to surface as the opaque "Invalid/empty data" error before MeTube even
+        # knew what resource the URL represented.
+        classification_opts.pop('download_archive', None)
         params = {
-            **user_opts,
+            **classification_opts,
             'quiet': not debug_logging,
             'verbose': debug_logging,
             'no_color': True,
@@ -1670,6 +1752,18 @@ class DownloadQueue:
             log.info(f'playlist limit is set. Processing only first {playlist_item_limit} entries')
             ytdl_options['playlistend'] = playlist_item_limit
         download = Download(dldirectory, self.config.TEMP_DIR, output, output_chapter, dl.quality, dl.format, ytdl_options, dl, allow_private=self.config.ALLOW_PRIVATE_ADDRESSES)
+        existing_path = download.reconcile_download_archive_with_disk()
+        if existing_path is not None:
+            dl.status = 'finished'
+            dl.filename = os.path.relpath(existing_path, dldirectory)
+            try:
+                dl.size = os.path.getsize(existing_path)
+            except OSError:
+                dl.size = None
+            dl.msg = 'File already exists on server.'
+            await self.done.put(download)
+            await self.notifier.completed(dl)
+            return {'status': 'ok', 'msg': 'Already downloaded: file exists on server.'}
         is_upcoming = (
             getattr(dl, 'live_status', None) == 'is_upcoming'
             or getattr(dl, 'status', None) == 'scheduled'
@@ -1683,6 +1777,7 @@ class DownloadQueue:
         else:
             await self.pending.put(download)
         await self.notifier.added(dl)
+        return {'status': 'ok'}
 
     def __write_feed_metadata_sync(self, entry, etype, download_type, folder,
                                    ytdl_options_presets, ytdl_options_overrides):
@@ -1784,7 +1879,10 @@ class DownloadQueue:
         sponsorblock=False,
     ):
         if not entry:
-            return {'status': 'error', 'msg': "Invalid/empty data was given."}
+            return {
+                'status': 'error',
+                'msg': 'yt-dlp returned no media metadata for this URL.',
+            }
 
         error = None
         if "live_status" in entry and "release_timestamp" in entry and entry.get("live_status") == "is_upcoming":
@@ -1936,8 +2034,7 @@ class DownloadQueue:
                 live_release_timestamp=entry.get('release_timestamp'),
                 sponsorblock=sponsorblock,
             )
-            await self.__add_download(dl, auto_start)
-            return {'status': 'ok'}
+            return await self.__add_download(dl, auto_start)
         return {'status': 'error', 'msg': f'Unsupported resource "{etype}"'}
 
     async def __record_add_failure(
@@ -2042,13 +2139,9 @@ class DownloadQueue:
         url_error = await asyncio.get_running_loop().run_in_executor(
             None, partial(validate_url, url, allow_private=self.config.ALLOW_PRIVATE_ADDRESSES))
         if url_error is not None:
+            # Input rejection happens before a download job exists. Do not turn
+            # malformed/unsafe input into a failed History row or a notification.
             log.warning('Rejected URL "%s": %s', url, url_error)
-            await self.__record_add_failure(
-                url, url_error, download_type, codec, format, quality, folder,
-                custom_name_prefix, playlist_item_limit, split_by_chapters, chapter_template,
-                subtitle_language, subtitle_mode, ytdl_options_presets, ytdl_options_overrides,
-                clip_start, clip_end, retry_entry,
-            )
             return {'status': 'error', 'msg': url_error}
         try:
             entry = await asyncio.get_running_loop().run_in_executor(
@@ -2056,14 +2149,19 @@ class DownloadQueue:
                 partial(self.__extract_info, url, ytdl_options_presets, ytdl_options_overrides),
             )
         except yt_dlp.utils.YoutubeDLError as exc:
+            # Unsupported, dead, or otherwise unextractable links failed before
+            # queueing. Surface the error to the requester only.
             msg = str(exc)
-            await self.__record_add_failure(
-                url, msg, download_type, codec, format, quality, folder,
-                custom_name_prefix, playlist_item_limit, split_by_chapters, chapter_template,
-                subtitle_language, subtitle_mode, ytdl_options_presets, ytdl_options_overrides,
-                clip_start, clip_end, retry_entry,
-            )
+            log.warning('Could not extract URL "%s": %s', url, msg)
             return {'status': 'error', 'msg': msg}
+        if not entry:
+            msg = (
+                'yt-dlp returned no media metadata for this URL. '
+                'A server-side yt-dlp filter may have skipped the source.'
+            )
+            log.warning('%s URL=%s', msg, url)
+            return {'status': 'error', 'msg': msg}
+
         retry_context = _compact_persisted_entry(retry_entry)
         if isinstance(entry, dict) and retry_context is not None:
             entry = {**entry, **copy.deepcopy(retry_context)}

@@ -189,7 +189,7 @@ class SubscriptionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(loaded.seen_ids, ["a", "b"])
             self.assertEqual(loaded.download_type, "audio")
             self.assertEqual(loaded.format, "mp3")
-            self.assertEqual(loaded.quality, "320")
+            self.assertEqual(loaded.quality, "best")
 
             with open(json_path, encoding="utf-8") as f:
                 payload = json.load(f)
@@ -198,7 +198,7 @@ class SubscriptionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["items"][0]["seen_ids"], ["a", "b"])
             self.assertEqual(payload["items"][0]["download_type"], "audio")
             self.assertEqual(payload["items"][0]["format"], "mp3")
-            self.assertEqual(payload["items"][0]["quality"], "320")
+            self.assertEqual(payload["items"][0]["quality"], "best")
             self.assertNotIn("timestamp", payload["items"][0])
 
     def test_legacy_explicit_audio_format_is_preserved(self):
@@ -444,10 +444,10 @@ class SubscriptionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sub.seen_ids[:2], ["v2", "v1"])
             self.assertEqual(sub.download_type, "audio")
             self.assertEqual(sub.format, "mp3")
-            self.assertEqual(sub.quality, "320")
+            self.assertEqual(sub.quality, "best")
             self.assertEqual([entry["webpage_url"] for entry, _, _ in queue.entries], ["https://example.com/v2"])
             _entry, args, _kwargs = queue.entries[0]
-            self.assertEqual(args[:4], ("audio", "auto", "mp3", "320"))
+            self.assertEqual(args[:4], ("audio", "auto", "mp3", "best"))
 
     async def test_explicit_audio_format_persists_across_reload(self):
         with tempfile.TemporaryDirectory() as tmp:

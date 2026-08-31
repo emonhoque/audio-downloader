@@ -1,811 +1,562 @@
-<nav class="navbar navbar-expand-md">
-  <div class="container container-xl">
-    <a class="navbar-brand d-flex align-items-center" href="#">
+<nav class="navbar app-header">
+  <div class="app-header-inner">
+    <a class="navbar-brand" href="#" aria-label="Audio Downloader home">
       <span class="brand-mark"><fa-icon [icon]="faDownload" /></span>
       <span>Audio Downloader</span>
     </a>
-    <div class="download-metrics">
-      @if (activeDownloads > 0) {
-        <div class="metric">
-          <fa-icon [icon]="faDownload" class="text-primary" />
-          <span>{{activeDownloads}} downloading</span>
-        </div>
-      }
-      @if (queuedDownloads > 0) {
-        <div class="metric">
-          <fa-icon [icon]="faClock" class="text-warning" />
-          <span>{{queuedDownloads}} queued</span>
-        </div>
-      }
-      @if (completedDownloads > 0) {
-        <div class="metric">
-          <fa-icon [icon]="faCheck" class="text-success" />
-          <span>{{completedDownloads}} completed</span>
-        </div>
-      }
-      @if (failedDownloads > 0) {
-        <div class="metric">
-          <fa-icon [icon]="faTimesCircle" class="text-danger" />
-          <span>{{failedDownloads}} failed</span>
-        </div>
-      }
-      @if ((totalSpeed | speed) !== '') {
-        <div class="metric">
-          <fa-icon [icon]="faTachometerAlt" class="text-info" />
-          <span>{{totalSpeed | speed }}</span>
-        </div>
-      }
-    </div>
-    <!--
-    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarsDefault" aria-controls="navbarsDefault" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navbarsDefault">
-      <ul class="navbar-nav mr-auto">
-        <li class="nav-item active">
-          <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
-        </li>
-      </ul>
-    </div>
-    -->
-    <div class="navbar-nav ms-auto">
-      <div class="nav-item dropdown" ngbDropdown placement="bottom-end">
-        <button class="btn theme-select-btn dropdown-toggle d-flex align-items-center"
-          id="theme-select"
-          type="button"
-          aria-label="Choose color theme"
-          aria-expanded="false"
-          ngbDropdownToggle>
-          @if(activeTheme){
-          <fa-icon [icon]="activeTheme.icon" />
-          }
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end position-absolute" aria-labelledby="theme-select" ngbDropdownMenu>
-          @for (theme of themes; track theme) {
-            <li>
-              <button type="button" class="dropdown-item d-flex align-items-center"
-              [class.active]="activeTheme === theme"
-              ngbDropdownItem
-              (click)="themeChanged(theme)">
-                <span class="me-2 opacity-50">
-                  <fa-icon [icon]="theme.icon" />
-                </span>
-                {{ theme.displayName }}
-                <span class="ms-auto"
-                [class.d-none]="activeTheme !== theme">
-                <fa-icon [icon]="faCheck" />
-                </span>
-              </button>
-            </li>
-          }
-        </ul>
+
+    @if (activeDownloads > 0 || queuedDownloads > 0 || (totalSpeed | speed) !== '') {
+      <div class="header-status d-none d-md-flex" aria-label="Download status">
+        @if (activeDownloads > 0) {
+          <span class="header-stat">{{ activeDownloads }} downloading</span>
+        }
+        @if (queuedDownloads > 0) {
+          <span class="header-stat">{{ queuedDownloads }} queued</span>
+        }
+        @if ((totalSpeed | speed) !== '') {
+          <span class="header-stat">{{ totalSpeed | speed }}</span>
+        }
       </div>
+    }
+
+    <div class="header-actions ms-auto">
+      <button
+        class="btn header-icon-button theme-cycle-button"
+        type="button"
+        (click)="cycleTheme()"
+        [attr.aria-label]="themeToggleLabel()"
+        [attr.title]="themeToggleLabel()">
+        @if (activeTheme) {
+          <fa-icon [icon]="activeTheme.icon" />
+        }
+      </button>
     </div>
   </div>
 </nav>
 
-<main role="main" class="container container-xl">
-  <form #f="ngForm">
-    <div class="add-url-box">
-      <!-- Main URL Input with Download Button -->
-      <div class="row mb-4">
-        <div class="col">
-          <ng-template #urlBarActions>
-            @if (addInProgress && cancelRequested) {
-              <button class="btn btn-warning btn-lg px-3" type="button" disabled>
-                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                Canceling...
-              </button>
-            } @else if (addInProgress) {
-              <button class="btn btn-secondary btn-lg px-3 add-progress-btn" type="button" disabled>
-                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                Adding...
-              </button>
-              <button class="btn btn-outline-danger btn-lg px-3 add-cancel-btn"
-                type="button"
-                (click)="cancelAdding()"
-                aria-label="Cancel adding URL"
-                title="Cancel adding URL">
-                <fa-icon [icon]="faTimesCircle" class="me-1" /> Cancel
-              </button>
-            } @else {
-              <button class="btn btn-primary btn-lg px-4" type="submit"
-                (click)="addDownload()"
-                [disabled]="downloads.loading">
-                <fa-icon [icon]="faDownload" class="me-2" />
-                Download
-              </button>
-            }
-          </ng-template>
-
-          <!-- Narrow viewports: full-width field, then Bootstrap btn-group (no faux input-group strip) -->
-          <div class="vstack gap-2 d-md-none">
-            <input type="text"
-              autocomplete="off"
-              spellcheck="false"
-              class="form-control form-control-lg"
-              placeholder="Paste a media, channel, or playlist link"
-              [(ngModel)]="addUrl"
-              [ngModelOptions]="{standalone: true}"
-              [disabled]="addInProgress || downloads.loading">
-            <div class="btn-group w-100" role="group" aria-label="Download audio">
-              <ng-container [ngTemplateOutlet]="urlBarActions" />
-            </div>
-          </div>
-
-          <!-- md and up: standard input-group so Bootstrap handles fused borders -->
-          <div class="input-group input-group-lg shadow-sm d-none d-md-flex">
-            <input type="text"
-              autocomplete="off"
-              spellcheck="false"
-              class="form-control form-control-lg"
-              placeholder="Paste a media, channel, or playlist link"
-              [(ngModel)]="addUrl"
-              [ngModelOptions]="{standalone: true}"
-              [disabled]="addInProgress || downloads.loading">
-            <ng-container [ngTemplateOutlet]="urlBarActions" />
-          </div>
-        </div>
-      </div>
-
-      <!-- Options Row -->
-      <div class="row mb-3 g-3">
-        <div class="col-md-6">
-          <div class="option-field">
-            <label for="audio-format">Audio format</label>
-            <select class="form-select"
-              id="audio-format"
-              name="format"
-              [(ngModel)]="format"
-              (change)="formatChanged()"
-              [disabled]="addInProgress || downloads.loading">
-              @for (audioFormat of audioFormats; track audioFormat.id) {
-                <option [ngValue]="audioFormat.id">{{ audioFormat.text }}</option>
-              }
-            </select>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="option-field">
-            <label for="audio-quality">Audio quality</label>
-            <select class="form-select"
-              id="audio-quality"
-              name="quality"
-              [(ngModel)]="quality"
-              (change)="qualityChanged()"
-              [disabled]="addInProgress || downloads.loading">
-              @for (audioQuality of qualities; track audioQuality.id) {
-                <option [ngValue]="audioQuality.id">{{ audioQuality.text }}</option>
-              }
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="row mb-3 g-3">
-        <div class="col-12 text-start">
-          <button type="button"
-            class="btn advanced-toggle"
-            (click)="toggleAdvanced()"
-            [attr.aria-expanded]="isAdvancedOpen"
-            aria-controls="advancedOptions">
-            <span>Advanced options</span>
-            <fa-icon
-              [icon]="isAdvancedOpen ? faChevronDown : faChevronRight"
-              class="ms-1" />
-          </button>
-        </div>
-      </div>
-
-      <!-- Advanced Options Panel -->
-      <div class="row">
-        <div class="col-12">
-          <div class="collapse show" id="advancedOptions" [ngbCollapse]="!isAdvancedOpen">
-            <div class="pt-1 pb-2">
-              <!-- Output -->
-              <div class="settings-section-label">Output</div>
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Type to filter existing folders, or enter a new folder name." triggers="click" autoClose="outside" container="body">Download Folder</span>
-                    <input type="text"
-                      class="form-control"
-                      placeholder="Default"
-                      name="folder"
-                      [(ngModel)]="folder"
-                      [ngbTypeahead]="searchFolder"
-                      [editable]="!!downloads.configuration['CREATE_CUSTOM_DIRS']"
-                      (focus)="folderFocus$.next($any($event.target).value)"
-                      (click)="folderClick$.next($any($event.target).value)"
-                      #folderTypeahead="ngbTypeahead"
-              [disabled]="addInProgress || downloads.loading">
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Add a prefix to downloaded filenames." triggers="click" autoClose="outside" container="body">Custom Name Prefix</span>
-                    <input type="text"
-                      class="form-control"
-                      placeholder="Default"
-                      name="customNamePrefix"
-                      [(ngModel)]="customNamePrefix"
-                      [disabled]="addInProgress || downloads.loading">
-                  </div>
-                </div>
-                <div class="col-12">
-                  <div class="row g-2 align-items-center">
-                    <div class="col-auto">
-                      <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="checkbox-sponsorblock"
-                          name="sponsorblock" [(ngModel)]="sponsorblock" (change)="sponsorblockChanged()"
-                          [disabled]="addInProgress || downloads.loading">
-                        <label class="form-check-label" for="checkbox-sponsorblock"
-                          ngbPopover="Cut out sponsor segments using SponsorBlock's crowd-sourced markers (YouTube only)."
-                          triggers="hover" container="body">Remove sponsor segments</label>
-                      </div>
-                    </div>
-                    <div class="col-auto">
-                      <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="checkbox-split-chapters"
-                          name="splitByChapters" [(ngModel)]="splitByChapters" (change)="splitByChaptersChanged()"
-                          [disabled]="addInProgress || downloads.loading">
-                        <label class="form-check-label" for="checkbox-split-chapters">Split by chapters</label>
-                      </div>
-                    </div>
-                    @if (splitByChapters) {
-                    <div class="col">
-                      <div class="input-group">
-                        <span class="input-group-text help-title" ngbPopover="Output template for chapter files." triggers="click" autoClose="outside" container="body">Template</span>
-                        <input type="text" class="form-control" name="chapterTemplate" [(ngModel)]="chapterTemplate"
-                          (change)="chapterTemplateChanged()" [disabled]="addInProgress || downloads.loading">
-                      </div>
-                    </div>
-                    }
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Optional start time (seconds, M:SS, or H:MM:SS). Blank = from start or YouTube &t= in URL." triggers="click" autoClose="outside" container="body">Clip start</span>
-                    <input type="text"
-                      class="form-control"
-                      name="clipStart"
-                      [(ngModel)]="clipStart"
-                      (change)="clipStartChanged()"
-                      placeholder="e.g. 2:26"
-                      [disabled]="addInProgress || downloads.loading">
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Optional end time. Blank = until end of media." triggers="click" autoClose="outside" container="body">Clip end</span>
-                    <input type="text"
-                      class="form-control"
-                      name="clipEnd"
-                      [(ngModel)]="clipEnd"
-                      (change)="clipEndChanged()"
-                      placeholder="e.g. 3:24"
-                      [disabled]="addInProgress || downloads.loading">
-                  </div>
-                </div>
-              </div>
-
-              <!-- Behavior -->
-              <div class="settings-section-label">Behavior</div>
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Automatically start downloads when added." triggers="click" autoClose="outside" container="body">Auto Start</span>
-                    <select class="form-select"
-                      name="autoStart"
-                      [(ngModel)]="autoStart"
-                      (change)="autoStartChanged()"
-                      [disabled]="addInProgress || downloads.loading">
-                      <option [ngValue]="true">Yes</option>
-                      <option [ngValue]="false">No</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Maximum number of items to download from a playlist or channel (0 = no limit)." triggers="click" autoClose="outside" container="body">Items Limit</span>
-                    <input type="number"
-                      min="0"
-                      class="form-control"
-                      placeholder="Default"
-                      name="playlistItemLimit"
-                      (keydown)="isNumber($event)"
-                      [(ngModel)]="playlistItemLimit"
-                      [disabled]="addInProgress || downloads.loading">
-                  </div>
-                </div>
-              </div>
-
-              <!-- yt-dlp -->
-              <div class="settings-section-label">yt-dlp</div>
-              <div class="row g-3">
-                <div class="col-12" [class.col-md-6]="allowYtdlOptionsOverrides()">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Choose one or more yt-dlp option presets configured on the server (applied in order)." triggers="click" autoClose="outside" container="body">Option Presets</span>
-                    <ng-select
-                      class="flex-grow-1"
-                      name="ytdlOptionsPresets"
-                      [items]="ytdlOptionPresetNames"
-                      [multiple]="true"
-                      [closeOnSelect]="false"
-                      placeholder="Default"
-                      [(ngModel)]="ytdlOptionsPresets"
-                      (ngModelChange)="ytdlOptionsPresetsChanged()"
-                      [disabled]="addInProgress || downloads.loading" />
-                  </div>
-                </div>
-                @if (allowYtdlOptionsOverrides()) {
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text help-title" ngbPopover="Optional per-download yt-dlp overrides as a JSON object." triggers="click" autoClose="outside" container="body">Custom yt-dlp Options</span>
-                    <input type="text"
-                      class="form-control"
-                      placeholder='e.g. {"ratelimit": 5000000}'
-                      name="ytdlOptionsOverrides"
-                      [(ngModel)]="ytdlOptionsOverrides"
-                      (change)="ytdlOptionsOverridesChanged()"
-                      [disabled]="addInProgress || downloads.loading">
-                  </div>
-                </div>
-                }
-              </div>
-
-              <!-- Tools -->
-              <div class="settings-section-label">Tools</div>
-              <div class="row g-3">
-                <div class="col-md-4">
-                  <div class="action-group-label help-title" ngbPopover="Upload a cookies.txt file from your browser to authenticate restricted or private downloads." triggers="click" autoClose="outside" container="body">Cookies</div>
-                  <input type="file" id="cookie-upload" class="d-none" accept=".txt"
-                    (change)="onCookieFileSelect($event)"
-                    [disabled]="cookieUploadInProgress || addInProgress">
-                  <div class="btn-group w-100" role="group">
-                    <label class="btn mb-0"
-                      [class]="hasCookies ? 'btn cookie-active-btn mb-0' : 'btn cookie-btn mb-0'"
-                      [class.disabled]="cookieUploadInProgress || addInProgress"
-                      for="cookie-upload">
-                      @if (cookieUploadInProgress) {
-                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                      } @else {
-                        <fa-icon [icon]="faUpload" class="me-2" />
-                      }
-                      {{ hasCookies ? 'Replace Cookies' : 'Upload Cookies' }}
-                    </label>
-                    @if (hasCookies) {
-                      <button type="button" class="btn btn-outline-danger"
-                        (click)="deleteCookies()"
-                        [disabled]="cookieUploadInProgress || addInProgress"
-                        ngbTooltip="Remove uploaded cookies">
-                        <fa-icon [icon]="faTrashAlt" />
-                      </button>
-                    }
-                  </div>
-                  <div class="cookie-status" [class.active]="hasCookies">
-                    @if (hasCookies) {
-                      <fa-icon [icon]="faCheckCircle" class="me-1" />
-                      Cookies active
-                    } @else {
-                      No cookies configured
-                    }
-                  </div>
-                </div>
-                <div class="col-md-8">
-                  <div class="action-group-label">Bulk Actions</div>
-                  <div class="row g-2">
-                    <div class="col-12 col-sm-4">
-                      <button type="button"
-                        class="btn btn-secondary w-100"
-                        (click)="openBatchImportModal()">
-                        <fa-icon [icon]="faFileImport" class="me-2" />
-                        Import URLs
-                      </button>
-                    </div>
-                    <div class="col-12 col-sm-4">
-                      <button type="button"
-                        class="btn btn-secondary w-100"
-                        (click)="exportBatchUrls('all')">
-                        <fa-icon [icon]="faFileExport" class="me-2" />
-                        Export URLs
-                      </button>
-                    </div>
-                    <div class="col-12 col-sm-4">
-                      <button type="button"
-                        class="btn btn-secondary w-100"
-                        (click)="copyBatchUrls('all')">
-                        <fa-icon [icon]="faCopy" class="me-2" />
-                        Copy URLs
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+<main role="main" class="app-main">
+  <form #f="ngForm" class="composer-card" (submit)="$event.preventDefault(); addDownload()">
+    <div class="composer-heading">
     </div>
-  </form>
 
-  <!-- Batch Import Modal -->
-  <div class="modal fade" tabindex="-1" role="dialog"
-  aria-modal="true"
-  aria-labelledby="batch-import-modal-title"
-  [class.show]="batchImportModalOpen"
-  [style.display]="batchImportModalOpen ? 'block' : 'none'">
-    <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 id="batch-import-modal-title" class="modal-title">Batch Import URLs</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeBatchImportModal()"></button>
-        </div>
-        <div class="modal-body">
-          <textarea id="batch-import-textarea" [(ngModel)]="batchImportText" class="form-control" rows="6"
-          placeholder="Paste one media URL per line"></textarea>
-          <div class="mt-2">
-            @if (batchImportStatus) {
-              <small>{{ batchImportStatus }}</small>
-            }
-            @if (batchImportTotal > 0) {
-              <div class="progress mt-2" style="height: 20px;">
-                <div class="progress-bar"
-                  [class.bg-danger]="batchImportFailures > 0"
-                  role="progressbar"
-                  [style.width.%]="(batchImportCount / batchImportTotal) * 100"
-                  [attr.aria-valuenow]="batchImportCount"
-                  [attr.aria-valuemin]="0"
-                  [attr.aria-valuemax]="batchImportTotal">
-                  {{ batchImportCount }} / {{ batchImportTotal }}
-                </div>
-              </div>
-            }
-          </div>
-        </div>
-        <div class="modal-footer">
-          @if (importInProgress) {
-            <button type="button" class="btn btn-danger me-auto" (click)="cancelBatchImport()">
-              Cancel Import
+    <div class="url-control">
+      @if (sourceForUrl(addUrl); as source) {
+        <span class="source-input-indicator" [title]="source.host">
+          <img [src]="source.icon" alt="" (error)="hideBrokenImage($event)">
+          <span>{{ source.name }}</span>
+        </span>
+      } @else {
+        <span class="url-link-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M10.6 13.4a4.6 4.6 0 0 0 6.5 0l2.3-2.3a4.6 4.6 0 0 0-6.5-6.5l-1.3 1.3"></path>
+            <path d="M13.4 10.6a4.6 4.6 0 0 0-6.5 0l-2.3 2.3a4.6 4.6 0 0 0 6.5 6.5l1.3-1.3"></path>
+          </svg>
+        </span>
+      }
+
+      <input
+        type="url"
+        autocomplete="off"
+        spellcheck="false"
+        class="form-control url-input"
+        placeholder="Paste a link"
+        [(ngModel)]="addUrl"
+        [ngModelOptions]="{ standalone: true }"
+        [disabled]="addInProgress || downloads.loading"
+        aria-label="Media URL">
+
+      <button
+        type="button"
+        class="btn paste-button"
+        data-paste-url
+        [disabled]="addInProgress || downloads.loading"
+        (click)="pasteFromClipboard()"
+        aria-label="Paste link from clipboard"
+        title="Paste">
+        <svg class="paste-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="7" y="5" width="10" height="15" rx="2"></rect>
+          <path d="M9 5.5V4.75A1.75 1.75 0 0 1 10.75 3h2.5A1.75 1.75 0 0 1 15 4.75v.75"></path>
+        </svg>
+      </button>
+
+      @if (addInProgress && cancelRequested) {
+        <button class="btn btn-secondary url-submit" type="button" disabled>
+          <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+          Canceling
+        </button>
+      } @else if (addInProgress) {
+        <button class="btn btn-secondary url-submit" type="button" disabled>
+          <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+          Adding
+        </button>
+        <button
+          class="btn url-cancel"
+          type="button"
+          (click)="cancelAdding()"
+          aria-label="Cancel adding URL">
+          Cancel
+        </button>
+      } @else {
+        <button class="btn url-submit" type="submit" [disabled]="downloads.loading || !addUrl.trim()">
+          Start download
+        </button>
+      }
+    </div>
+
+    <div class="quick-settings" aria-label="Current download settings">
+      <div class="quick-setting" ngbDropdown>
+        <span>Format</span>
+        <button
+          type="button"
+          class="quick-setting-toggle"
+          id="audio-format"
+          ngbDropdownToggle
+          [disabled]="addInProgress || downloads.loading"
+          aria-label="Choose audio format">
+          <strong>{{ selectedFormatText() }}</strong>
+          <span class="quick-setting-caret" aria-hidden="true"></span>
+        </button>
+        <div class="quick-setting-menu" ngbDropdownMenu aria-labelledby="audio-format">
+          @for (audioFormat of audioFormats; track audioFormat.id) {
+            <button
+              type="button"
+              class="quick-setting-option"
+              ngbDropdownItem
+              [class.active]="format === audioFormat.id"
+              (click)="selectFormat(audioFormat.id)">
+              <span>{{ audioFormat.text }}</span>
+              @if (format === audioFormat.id) {
+                <fa-icon [icon]="faCheck" aria-hidden="true" />
+              }
             </button>
           }
-          <button type="button" class="btn btn-secondary" (click)="closeBatchImportModal()">Close</button>
-          <button type="button" class="btn btn-primary" (click)="startBatchImport()" [disabled]="importInProgress">
-            Import URLs
-          </button>
         </div>
       </div>
-    </div>
-  </div>
 
+      <div class="quick-setting" ngbDropdown>
+        <span>Quality</span>
+        <button
+          type="button"
+          class="quick-setting-toggle"
+          id="audio-quality"
+          ngbDropdownToggle
+          [disabled]="addInProgress || downloads.loading"
+          aria-label="Choose audio quality">
+          <strong>{{ selectedQualityText() }}</strong>
+          <span class="quick-setting-caret" aria-hidden="true"></span>
+        </button>
+        <div class="quick-setting-menu quick-setting-menu-end" ngbDropdownMenu aria-labelledby="audio-quality">
+          @for (audioQuality of qualities; track audioQuality.id) {
+            <button
+              type="button"
+              class="quick-setting-option"
+              ngbDropdownItem
+              [class.active]="quality === audioQuality.id"
+              (click)="selectQuality(audioQuality.id)">
+              <span>{{ audioQuality.text }}</span>
+              @if (quality === audioQuality.id) {
+                <fa-icon [icon]="faCheck" aria-hidden="true" />
+              }
+            </button>
+          }
+        </div>
+      </div>
+
+    </div>
+
+    @if (existingDownloadForUrl(); as existing) {
+      <div class="duplicate-notice" role="status">
+        <div class="duplicate-copy">
+          <strong>Already downloaded</strong>
+          <span>{{ existing[1].title }}</span>
+          <small>
+            {{ formatCodecLabel(existing[1]) }}
+            @if (existing[1].size) { · {{ existing[1].size | fileSize }} }
+          </small>
+        </div>
+        <div class="duplicate-actions">
+          <button type="button" class="btn" (click)="showInHistory(existing[1])">Show in History</button>
+          @if (existing[1].filename) {
+            <a class="btn" [href]="buildDownloadLink(existing[1])" download>Download file</a>
+          }
+          <button type="button" class="btn" (click)="downloadAgain(existing[1])">Download again</button>
+        </div>
+      </div>
+    }
+
+  </form>
 
   @if (downloads.loading) {
-    <div class="alert alert-info" role="alert">
-      Connecting to server...
-    </div>
+    <div class="alert alert-info connection-alert" role="alert">Connecting to server...</div>
   }
-  <section class="download-section active-download-section" [class.d-none]="downloads.queue.size === 0">
-    <div class="metube-section-header">
-      <div class="metube-section-title">
-        <span class="section-heading">
-          <span>Downloading</span>
-          <span class="section-count">{{ downloads.queue.size }}</span>
-        </span>
+
+  <div class="workspace">
+    <section class="history-panel" id="history" aria-labelledby="history-title">
+      <header class="panel-heading">
+        <div>
+          <h2 id="history-title">History</h2>
+          <p>Search across title, artist, source, format, filename, or status.</p>
+        </div>
+      </header>
+
+      <div class="history-tools">
+        <label class="history-search">
+          <span class="visually-hidden">Search download history</span>
+          <input
+            #historySearchInput
+            type="search"
+            class="form-control"
+            placeholder="Search download history"
+            [(ngModel)]="historySearch"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="historySearchChanged()">
+          @if (historySearch) {
+            <button
+              type="button"
+              class="history-search-clear"
+              aria-label="Clear history search"
+              title="Clear search"
+              (click)="clearHistorySearch(historySearchInput)">
+              <span aria-hidden="true">×</span>
+            </button>
+          }
+        </label>
+        <div class="history-sort" ngbDropdown>
+          <button
+            type="button"
+            class="history-sort-toggle"
+            id="history-sort"
+            ngbDropdownToggle
+            aria-label="Sort download history">
+            <span>{{ selectedHistorySortText() }}</span>
+            <span class="history-sort-caret" aria-hidden="true"></span>
+          </button>
+          <div class="history-sort-menu" ngbDropdownMenu aria-labelledby="history-sort">
+            @for (sortOption of historySortOptions; track sortOption.id) {
+              <button
+                type="button"
+                class="history-sort-option"
+                ngbDropdownItem
+                [class.active]="historySort === sortOption.id"
+                (click)="selectHistorySort(sortOption.id)">
+                <span>{{ sortOption.text }}</span>
+                @if (historySort === sortOption.id) {
+                  <fa-icon [icon]="faCheck" aria-hidden="true" />
+                }
+              </button>
+            }
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="section-actions">
-      <button type="button" class="btn action-button" disabled #queueDelSelected (click)="delSelectedDownloads('queue')"><fa-icon [icon]="faTrashAlt" />&nbsp; Cancel selected</button>
-      <button type="button" class="btn action-button" disabled #queueDownloadSelected (click)="startSelectedDownloads('queue')"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
-    </div>
-    <div class="table-shell overflow-auto">
-      <table class="table modern-table mb-0">
-        <thead>
-          <tr>
-            <th scope="col" style="width: 1rem;">
-              <app-select-all-checkbox #queueMasterCheckboxRef [id]="'queue'" [list]="downloads.queue" (changed)="queueSelectionChanged($event)" />
-            </th>
-            <th scope="col">Audio</th>
-            <th scope="col" style="width: 7rem;">Format</th>
-            <th scope="col" style="width: 8rem;">Speed</th>
-            <th scope="col" style="width: 7rem;">ETA</th>
-            <th scope="col" style="width: 6rem;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (download of downloads.queue | keyvalue: asIsOrder; track download.key) {
-            <tr class="mobile-card-row" [class.disabled]='download.value.deleting'>
-              <td class="mobile-card-select">
-                <app-item-checkbox [id]="download.key" [master]="queueMasterCheckboxRef" [checkable]="download.value" />
-              </td>
-              <td class="mobile-card-primary" title="{{ download.value.filename }}">
-                <div class="d-flex flex-column flex-sm-row align-items-center row-gap-2 column-gap-3">
-                  <div class="d-flex align-items-center flex-wrap gap-2">
-                    <span>{{ download.value.title }}</span>
-                    @if (download.value.live_status === 'is_live' && download.value.status !== 'scheduled') {
-                      <span class="badge bg-danger">LIVE</span>
+
+      @if (downloads.queue.size === 0 && downloads.done.size === 0) {
+        <div class="empty-history">
+          <strong>No download history yet</strong>
+          <span>Downloads will appear here as soon as they start.</span>
+        </div>
+      } @else if (cachedHistoryEntries.length === 0) {
+        <div class="empty-history">
+          <strong>No matching downloads</strong>
+          <span>Try a different search.</span>
+        </div>
+      } @else {
+        <ul class="history-list">
+          @for (entry of cachedHistoryEntries; track entry[0] + entry[2]) {
+            <li class="history-entry" [class.active-history-entry]="entry[2] === 'queue'" [class.failed]="entry[1].status === 'error'" [class.disabled]="entry[1].deleting">
+              <div
+                class="history-row"
+                [attr.role]="entry[2] === 'done' ? 'button' : null"
+                [attr.tabindex]="entry[2] === 'done' ? 0 : null"
+                [attr.aria-expanded]="entry[2] === 'done' ? isHistoryExpanded(entry[0]) : null"
+                (click)="entry[2] === 'done' && toggleHistoryDetail(entry[0])"
+                (keydown.enter)="entry[2] === 'done' && toggleHistoryDetail(entry[0])"
+                (keydown.space)="$event.preventDefault(); entry[2] === 'done' && toggleHistoryDetail(entry[0])">
+                <div class="history-thumb" aria-hidden="true">
+                  <fa-icon class="history-audio-icon" [icon]="faMusic" />
+                </div>
+
+                <div class="history-main">
+                  <div class="history-title">{{ entry[1].title }}</div>
+                  @if (entry[1].artist) {
+                    <div class="history-artist">{{ entry[1].artist }}</div>
+                  }
+                  <div class="history-meta">
+                    @if (sourceForUrl(entry[1].url); as source) {
+                      <span class="source-inline" [title]="source.host">
+                        <img [src]="source.icon" alt="" (error)="hideBrokenImage($event)">
+                        <span>{{ source.name }}</span>
+                      </span>
+                      <span class="meta-separator">·</span>
+                    }
+                    <span class="meta-format">{{ formatCodecLabel(entry[1]) }}</span>
+                    @if (entry[1].size) {
+                      <span class="meta-separator meta-size-separator">·</span>
+                      <span class="meta-size">{{ entry[1].size | fileSize }}</span>
+                    }
+                    @if (entry[1].timestamp) {
+                      <span class="meta-separator meta-date-separator">·</span>
+                      <span class="meta-date">{{ entry[1].timestamp / 1000000 | date:'MMM d, h:mm a' }}</span>
+                    }
+                    @if (entry[2] === 'queue') {
+                      <span class="meta-separator history-live-state-separator">·</span>
+                      <span class="history-live-state">
+                        <span class="history-live-state-dot" aria-hidden="true"></span>
+                        <span>{{ activityStatusLabel(entry[1]) }}</span>
+                      </span>
+                    } @else {
+                      <span class="meta-separator history-desktop-state-separator">·</span>
+                      @if (entry[1].status === 'error') {
+                        <span class="history-desktop-state state-failed">
+                          <fa-icon [icon]="faTimesCircle" aria-hidden="true" />
+                          <span>Failed</span>
+                          <span class="history-desktop-state-caption">No file created</span>
+                        </span>
+                      } @else {
+                        <span class="history-desktop-state state-ready">
+                          <fa-icon [icon]="faCheckCircle" aria-hidden="true" />
+                          <span>Downloaded</span>
+                          <span class="history-desktop-state-caption">File available</span>
+                        </span>
+                      }
+                      @if (entry[1].status === 'error') {
+                        <span class="meta-separator history-mobile-state-separator">·</span>
+                        <span class="history-mobile-state state-failed">
+                          <fa-icon [icon]="faTimesCircle" aria-hidden="true" />
+                          <span>Failed</span>
+                        </span>
+                      } @else {
+                        <span class="history-mobile-state state-ready" title="Downloaded">
+                          <fa-icon [icon]="faCheckCircle" aria-hidden="true" />
+                          <span class="visually-hidden">Downloaded</span>
+                        </span>
+                      }
                     }
                   </div>
-                  @if (download.value.status === 'scheduled') {
-                    <span class="badge bg-warning text-dark">
-                      <fa-icon [icon]="faClock" />
-                      Waiting for stream
-                      @if (liveCountdownSeconds(download.value); as secs) {
-                        - starts in {{ secs | eta }}
-                      }
-                    </span>
-                  } @else {
-                    <ngb-progressbar height="1.5rem" [showValue]="!isIndeterminate(download.value)" [striped]="isIndeterminate(download.value)" [animated]="isIndeterminate(download.value)" type="success"
-                    [value]="isIndeterminate(download.value) ? 100 : download.value.percent" class="download-progressbar">
-                      @if (download.value.status === 'postprocessing') {
-                        <span>Post-processing</span>
-                      }
-                    </ngb-progressbar>
-                  }
-                </div>
-              </td>
-              <td class="text-nowrap" data-label="Format">{{ formatLabel(download.value) }}</td>
-              <td data-label="Speed">{{ download.value.speed | speed }}</td>
-              <td data-label="ETA">{{ download.value.eta | eta }}</td>
-              <td class="mobile-card-actions">
-                <div class="d-flex">
-                  @if (download.value.status === 'pending' || download.value.status === 'scheduled') {
-                    <button type="button" class="btn btn-link" [attr.aria-label]="'Start download for ' + download.value.title" (click)="downloadItemByKey(download.key)"><fa-icon [icon]="faDownload" /></button>
-                  }
-                  <button type="button" class="btn btn-link" [attr.aria-label]="'Remove ' + download.value.title + ' from queue'" (click)="delDownload('queue', download.key)"><fa-icon [icon]="faTrashAlt" /></button>
-                  <a href="{{download.value.url}}" target="_blank" rel="noopener noreferrer" class="btn btn-link" [attr.aria-label]="'Open source URL for ' + download.value.title"><fa-icon [icon]="faExternalLinkAlt" /></a>
-                </div>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
 
-  <section class="download-section">
-  <div class="metube-section-header">
-    <button type="button" class="metube-section-toggle" (click)="toggleCompletedCollapsed()" [attr.aria-expanded]="!completedCollapsed">
-      <span class="section-heading">
-        <span>Completed</span>
-        <span class="section-count">{{ downloads.done.size }}</span>
-      </span>
-      <fa-icon [icon]="completedCollapsed ? faChevronRight : faChevronDown" class="metube-section-chevron" />
-    </button>
-  </div>
-  @if (!completedCollapsed) {
-    <div class="section-actions">
-      <button type="button" class="btn action-button action-button-primary" disabled #doneDownloadSelected (click)="downloadSelectedFiles()"><fa-icon [icon]="faDownload" />&nbsp; Download selected</button>
-      <button type="button" class="btn action-button" (click)="toggleSortOrder()" ngbTooltip="{{ sortAscending ? 'Oldest first' : 'Newest first' }}"><fa-icon [icon]="sortAscending ? faSortAmountUp : faSortAmountDown" />&nbsp; {{ sortAscending ? 'Oldest first' : 'Newest first' }}</button>
-      <button type="button" class="btn action-button" disabled #doneDelSelected (click)="delSelectedDownloads('done')"><fa-icon [icon]="faTrashAlt" />&nbsp; Clear selected</button>
-      <button type="button" class="btn action-button" [disabled]="!hasFailedDone" (click)="clearFailedDownloads()"><fa-icon [icon]="faTimesCircle" />&nbsp; Clear failed</button>
-      <button type="button" class="btn action-button" [disabled]="!hasFailedDone" (click)="retryFailedDownloads()"><fa-icon [icon]="faRedoAlt" />&nbsp; Retry failed</button>
-    </div>
-    <div class="table-shell overflow-auto">
-      <table class="table modern-table mb-0">
-        <thead>
-          <tr>
-            <th scope="col" style="width: 1rem;">
-              <app-select-all-checkbox #doneMasterCheckboxRef [id]="'done'" [list]="downloads.done" [orderedIds]="cachedSortedDoneIds" (changed)="doneSelectionChanged($event)" />
-            </th>
-            <th scope="col">Audio</th>
-            <th scope="col">Quality</th>
-            <th scope="col">Format</th>
-            <th scope="col">File Size</th>
-            <th scope="col">Downloaded</th>
-            <th scope="col" style="width: 10rem;"></th>
-          </tr>
-        </thead>
-        <tbody>
-          @if (downloads.done.size === 0) {
-            <tr class="empty-row">
-              <td colspan="7">
-                <div class="empty-state">
-                  <span class="empty-state-icon"><fa-icon [icon]="faCheckCircle" /></span>
-                  <span>
-                    <strong>No download history yet</strong>
-                    <small>Finished and failed downloads will appear here.</small>
-                  </span>
-                </div>
-              </td>
-            </tr>
-          }
-          @for (entry of cachedSortedDone; track entry[0]) {
-            <tr class="mobile-card-row" [class.disabled]='entry[1].deleting'>
-              <td class="mobile-card-select">
-                <app-item-checkbox [id]="entry[0]" [master]="doneMasterCheckboxRef" [checkable]="entry[1]" />
-              </td>
-              <td class="mobile-card-primary">
-                <div style="display: inline-block; width: 1.5rem;">
-                  @if (entry[1].status === 'finished') {
-                    <fa-icon [icon]="faCheckCircle" class="text-success" />
-                  }
-                  @if (entry[1].status === 'error') {
-                    <button type="button" class="btn btn-link p-0"
-                      (click)="toggleErrorDetail(entry[0])"
-                      [attr.aria-label]="'Toggle error details for ' + entry[1].title"
-                      [attr.aria-expanded]="isErrorExpanded(entry[0])">
-                      <fa-icon [icon]="faTimesCircle" class="text-danger" />
-                    </button>
-                  }
-                </div>
-                <span ngbTooltip="{{buildResultItemTooltip(entry[1])}}">@if (!!entry[1].filename) {
-                  <a href="{{buildDownloadLink(entry[1])}}" target="_blank">{{ entry[1].title }}</a>
-                } @else {
-                  @if (entry[1].status === 'error') {
-                    <button type="button" class="btn btn-link p-0 text-start align-baseline" (click)="toggleErrorDetail(entry[0])">
-                      {{entry[1].title}}
-                      @if (!isErrorExpanded(entry[0])) {
-                        <small class="text-danger ms-2">
-                          <fa-icon [icon]="faChevronRight" size="xs" class="me-1" />Click for details
-                        </small>
+                  @if (entry[2] === 'queue') {
+                    <div class="history-live-progress">
+                      @if (entry[1].status === 'downloading') {
+                        <div class="history-live-progress-copy">
+                          <span>{{ (entry[1].percent || 0) | number:'1.0-0' }}%</span>
+                          @if ((entry[1].speed | speed) !== '') {
+                            <span>· {{ entry[1].speed | speed }}</span>
+                          }
+                          @if (entry[1].eta) {
+                            <span>· {{ entry[1].eta | eta }} left</span>
+                          }
+                        </div>
+                      } @else if (entry[1].status === 'scheduled') {
+                        <div class="history-live-progress-copy">
+                          <span>Waiting for stream</span>
+                          @if (liveCountdownSeconds(entry[1]); as secs) {
+                            <span>· starts in {{ secs | eta }}</span>
+                          }
+                        </div>
                       }
+
+                      @if (entry[1].status !== 'pending' && entry[1].status !== 'scheduled') {
+                        <ngb-progressbar
+                          height="0.28rem"
+                          [showValue]="false"
+                          [striped]="isIndeterminate(entry[1])"
+                          [animated]="isIndeterminate(entry[1])"
+                          [value]="isIndeterminate(entry[1]) ? 100 : (entry[1].percent || 0)"
+                          class="history-progressbar" />
+                      }
+                    </div>
+                  }
+                </div>
+
+
+                <div class="history-actions completed-row-actions">
+                  @if (entry[2] === 'queue') {
+                    <button
+                      type="button"
+                      class="btn history-cancel-action"
+                      [attr.aria-label]="'Cancel ' + entry[1].title"
+                      (click)="$event.stopPropagation(); delDownload('queue', entry[0])">
+                      <fa-icon [icon]="faTimesCircle" aria-hidden="true" />
+                      <span>Cancel</span>
                     </button>
                   } @else {
-                    <span>{{entry[1].title}}</span>
-                  }
-                }</span>
-                @if (entry[1].status === 'error' && isErrorExpanded(entry[0])) {
-                  <div class="alert alert-danger py-2 px-3 mt-2 mb-0 small" style="border-left: 4px solid var(--bs-danger);">
-                    <div class="d-flex justify-content-between align-items-start">
-                      <div class="flex-grow-1">
-                        @if (entry[1].msg) {
-                          <div class="mb-1"><strong>Message:</strong> {{entry[1].msg}}</div>
-                        }
-                        @if (entry[1].error) {
-                          <div class="mb-1"><strong>Error:</strong> {{entry[1].error}}</div>
-                        }
-                        <div class="text-muted" style="word-break: break-all;"><strong>URL:</strong> {{entry[1].url}}</div>
-                      </div>
-                      <button type="button" class="btn btn-sm btn-outline-danger ms-2 flex-shrink-0"
-                        (click)="copyErrorMessage(entry[0], entry[1]); $event.stopPropagation()"
-                        ngbTooltip="Copy error details to clipboard">
-                        @if (lastCopiedErrorId === entry[0]) {
-                          <span class="text-success">Copied!</span>
-                        } @else {
-                          <fa-icon [icon]="faCopy" />
-                        }
+                    @if (entry[1].filename) {
+                      <a
+                        [href]="buildDownloadLink(entry[1])"
+                        download
+                        class="btn history-primary-action completed-download-primary"
+                        (click)="$event.stopPropagation()"
+                        [attr.aria-label]="'Download result file for ' + entry[1].title">
+                        <fa-icon [icon]="faDownload" aria-hidden="true" />
+                        <span>Download File</span>
+                      </a>
+                    } @else if (entry[1].status === 'error') {
+                      <button
+                        type="button"
+                        class="btn history-primary-action completed-download-primary"
+                        (click)="$event.stopPropagation(); retryDownload(entry[0], entry[1])">
+                        <fa-icon [icon]="faRedoAlt" aria-hidden="true" />
+                        <span>Retry</span>
                       </button>
+                    }
+                    <button
+                      type="button"
+                      class="btn history-more-button completed-more-button"
+                      (click)="$event.stopPropagation(); toggleHistoryDetail(entry[0])"
+                      [attr.aria-label]="'Show details for ' + entry[1].title"
+                      [attr.aria-expanded]="isHistoryExpanded(entry[0])">
+                      <span aria-hidden="true">···</span>
+                    </button>
+                  }
+                </div>
+              </div>
+
+              @if (entry[2] === 'done' && isHistoryExpanded(entry[0])) {
+                <div class="history-details">
+                  <dl class="history-details-grid">
+                    @if (entry[1].filename) {
+                      <dt>Filename</dt>
+                      <dd class="history-filename" [title]="entry[1].filename">
+                        <span class="history-filename-prefix">{{ historyFilenamePrefix(entry[1].filename) }}</span>
+                        @if (historyFilenameTail(entry[1].filename); as filenameTail) {
+                          <span class="history-filename-tail">{{ filenameTail }}</span>
+                        }
+                      </dd>
+                    }
+                    <dt>Source</dt>
+                    <dd class="break-anywhere">
+                      <a
+                        class="history-source-link"
+                        [href]="entry[1].url"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                        {{ entry[1].url }}
+                      </a>
+                    </dd>
+                    @if (entry[1].status === 'error') {
+                      @if (entry[1].msg) {
+                        <dt>Message</dt>
+                        <dd>{{ entry[1].msg }}</dd>
+                      }
+                      @if (entry[1].error) {
+                        <dt>Error</dt>
+                        <dd>{{ entry[1].error }}</dd>
+                      }
+                    }
+                  </dl>
+
+                  <div>
+                    @if (entry[1].chapter_files && entry[1].chapter_files.length > 0) {
+                      <div class="chapter-list">
+                        <strong>Chapter files</strong>
+                        @for (chapterFile of entry[1].chapter_files; track chapterFile.filename) {
+                          <a [href]="buildChapterDownloadLink(entry[1], chapterFile.filename)" download>
+                            {{ getChapterFileName(chapterFile.filename) }}
+                          </a>
+                        }
+                      </div>
+                    }
+
+                    <div class="history-detail-actions">
+                      @if (entry[1].filename && canShareDownloads()) {
+                        <button type="button" class="btn" (click)="shareDownload(entry[1])">
+                          <fa-icon [icon]="faShareNodes" aria-hidden="true" />
+                          <span>Share file</span>
+                        </button>
+                      }
+                      @if (entry[1].status === 'error') {
+                        <button type="button" class="btn" (click)="copyErrorMessage(entry[0], entry[1])">
+                          {{ lastCopiedErrorId === entry[0] ? 'Copied' : 'Copy error' }}
+                        </button>
+                      }
+                      @if (pendingDeleteId === entry[0]) {
+                        <button type="button" class="btn history-delete-confirm" (click)="confirmDelete('done', entry[0])">
+                          <fa-icon [icon]="faTrashAlt" aria-hidden="true" />
+                          <span>Delete now</span>
+                        </button>
+                        <button type="button" class="btn history-delete-cancel" (click)="cancelDelete()">
+                          <span>Cancel</span>
+                        </button>
+                      } @else {
+                        <button type="button" class="btn btn-outline-danger" (click)="requestDelete(entry[0])">
+                          <fa-icon [icon]="faTrashAlt" aria-hidden="true" />
+                          <span>Delete</span>
+                        </button>
+                      }
                     </div>
                   </div>
-                }
-              </td>
-              <td class="text-nowrap" data-label="Quality">
-                {{ formatQualityLabel(entry[1]) }}
-              </td>
-              <td class="text-nowrap" data-label="Format">
-                {{ formatCodecLabel(entry[1]) }}
-              </td>
-              <td data-label="Size">
-                @if (entry[1].size) {
-                  <span>{{ entry[1].size | fileSize }}</span>
-                }
-              </td>
-              <td class="text-nowrap" data-label="Downloaded">
-                @if (entry[1].timestamp) {
-                  <span>{{ entry[1].timestamp / 1000000 | date:'yyyy-MM-dd HH:mm' }}</span>
-                }
-              </td>
-              <td class="text-end mobile-card-actions">
-                <div class="completed-row-actions">
-                  @if (entry[1].filename) {
-                    <a href="{{buildDownloadLink(entry[1])}}" download
-                      class="btn btn-primary btn-sm completed-download-primary"
-                      [attr.aria-label]="'Download result file for ' + entry[1].title">
-                      <fa-icon [icon]="faDownload" class="me-2" />
-                      Download
-                    </a>
-                  } @else if (entry[1].status === 'error') {
-                    <button type="button"
-                      class="btn btn-outline-primary btn-sm completed-download-primary"
-                      [attr.aria-label]="'Retry download for ' + entry[1].title"
-                      (click)="retryDownload(entry[0], entry[1])">
-                      <fa-icon [icon]="faRedoAlt" class="me-2" />
-                      Retry
-                    </button>
-                  }
-                  <div class="dropdown" ngbDropdown placement="bottom-end" container="body">
-                    <button type="button"
-                      class="btn btn-outline-secondary btn-sm completed-more-button"
-                      ngbDropdownToggle
-                      [attr.aria-label]="'More actions for ' + entry[1].title"
-                      title="More actions">
-                      <span aria-hidden="true">⋮</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end" ngbDropdownMenu>
-                      @if (entry[1].filename && canShareDownloads()) {
-                        <li>
-                          <button type="button" class="dropdown-item" ngbDropdownItem
-                            (click)="shareDownload(entry[1])">
-                            <fa-icon [icon]="faShareNodes" class="me-2" />
-                            Share file
-                          </button>
-                        </li>
-                      }
-                      <li>
-                        <a href="{{entry[1].url}}" target="_blank" rel="noopener noreferrer"
-                          class="dropdown-item" ngbDropdownItem>
-                          <fa-icon [icon]="faExternalLinkAlt" class="me-2" />
-                          Open source
-                        </a>
-                      </li>
-                      <li><hr class="dropdown-divider"></li>
-                      <li>
-                        <button type="button" class="dropdown-item text-danger" ngbDropdownItem
-                          (click)="delDownload('done', entry[0])">
-                          <fa-icon [icon]="faTrashAlt" class="me-2" />
-                          Delete
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
                 </div>
-              </td>
-            </tr>
-          @if (entry[1].chapter_files && entry[1].chapter_files.length > 0) {
-            @for (chapterFile of entry[1].chapter_files; track chapterFile.filename) {
-              <tr class="mobile-card-row chapter-row" [class.disabled]='entry[1].deleting'>
-                <td></td>
-                <td>
-                  <div style="padding-left: 2rem;">
-                <fa-icon [icon]="faCheckCircle" class="text-success me-2" />
-                <a href="{{buildChapterDownloadLink(entry[1], chapterFile.filename)}}" target="_blank" [attr.aria-label]="'Open chapter file ' + getChapterFileName(chapterFile.filename)">{{
-                  getChapterFileName(chapterFile.filename) }}</a>
-              </div>
-            </td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td>
-              @if (chapterFile.size) {
-              <span>{{ chapterFile.size | fileSize }}</span>
               }
-            </td>
-            <td></td>
-            <td>
-              <div class="d-flex">
-                <a href="{{buildChapterDownloadLink(entry[1], chapterFile.filename)}}" download [attr.aria-label]="'Download chapter file ' + getChapterFileName(chapterFile.filename)"
-                  class="btn btn-link"><fa-icon [icon]="faDownload" /></a>
-              </div>
-            </td>
-          </tr>
+            </li>
           }
-        }
+        </ul>
       }
-        </tbody>
-      </table>
+    </section>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="footer-status-group" aria-label="Application status">
+      <span class="footer-status-item">
+        <span class="footer-status-dot" aria-hidden="true"></span>
+        @if (activeDownloads === 0 && queuedDownloads === 0) {
+          <span>Idle</span>
+        } @else if (activeDownloads > 0) {
+          <span>{{ activeDownloads }} active</span>
+        } @else {
+          <span>{{ queuedDownloads }} queued</span>
+        }
+      </span>
+      <span class="footer-status-item">
+        <strong>{{ downloads.done.size }}</strong>
+        <span>history</span>
+      </span>
     </div>
-  }
-  </section>
 
-</main><!-- /.container -->
-
-<footer class="footer py-3 mt-5">
-  <div class="container text-center">
-    <div class="footer-content">
+    <div class="footer-meta" aria-label="Runtime versions">
       @if (ytDlpVersion) {
-        <div class="version-item">
-          <span class="version-label">yt-dlp</span>
-          <span class="version-value">{{ytDlpVersion}}</span>
-        </div>
-        @if (ytDlpOptionsUpdateTime) {
-          <div class="version-separator"></div>
-          <div class="version-item">
-            <span class="version-label">yt-dlp-options</span>
-            <span class="version-value">{{ytDlpOptionsUpdateTime}}</span>
+        <span class="footer-stat">
+          <span class="footer-label">yt-dlp</span>
+          <span class="footer-value">{{ ytDlpVersion }}</span>
+        </span>
+      }
+      @if (ytDlpOptionsUpdateTime) {
+        <span class="footer-stat">
+          <span class="footer-label">yt-dlp-options</span>
+          <span class="footer-value">{{ ytDlpOptionsUpdateTime }}</span>
+        </span>
+      }
+    </div>
+
+    <div class="footer-actions">
+      <div class="report-control footer-report-control">
+        <button
+          type="button"
+          class="btn problem-report-button footer-report-button"
+          [disabled]="reportProblemInProgress"
+          (click)="openReportConfirmation('footer')"
+          [attr.aria-expanded]="reportConfirmPlacement === 'footer'"
+          aria-haspopup="dialog">
+          @if (reportProblemInProgress) {
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+          } @else {
+            <fa-icon [icon]="faTriangleExclamation" aria-hidden="true" />
+          }
+          <span>Report</span>
+        </button>
+
+        @if (reportConfirmPlacement === 'footer') {
+          <div class="report-confirmation-panel footer-report-confirmation" role="dialog" aria-label="Report confirmation">
+            <strong>Report an issue?</strong>
+            <span>Send a notification to the administrator that something is broken.</span>
+            <div class="report-confirmation-actions">
+              <button type="button" class="btn report-confirm-submit" (click)="reportProblem()">Send report</button>
+              <button type="button" class="btn report-confirm-cancel" (click)="cancelReportConfirmation()">Cancel</button>
+            </div>
           </div>
         }
-        <div class="version-separator"></div>
-      }
-      <button type="button" class="btn btn-sm btn-outline-warning problem-report-button"
-        [disabled]="reportProblemInProgress" (click)="reportProblem()"
-        title="Notify the administrator that something is broken">
-        @if (reportProblemInProgress) {
-          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-        } @else {
-          <fa-icon [icon]="faTriangleExclamation" />
-        }
-        <span>Something's broken</span>
-      </button>
+      </div>
     </div>
   </div>
 </footer>

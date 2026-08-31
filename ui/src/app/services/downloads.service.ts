@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { of, Subject } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, tap } from 'rxjs/operators';
 import { MeTubeSocket } from './metube-socket.service';
 import { Download, Status, State } from '../interfaces';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -10,15 +10,17 @@ export interface AddDownloadPayload {
   url: string;
   quality: string;
   format: string;
-  folder: string;
-  customNamePrefix: string;
-  playlistItemLimit: number;
-  autoStart: boolean;
-  splitByChapters: boolean;
-  sponsorblock: boolean;
-  chapterTemplate: string;
-  ytdlOptionsPresets: string[];
-  ytdlOptionsOverrides: string;
+  // Optional only for the separate subscriptions/legacy API surface. The
+  // normal DownloadsService.add() path intentionally ignores these fields.
+  folder?: string;
+  customNamePrefix?: string;
+  playlistItemLimit?: number;
+  autoStart?: boolean;
+  splitByChapters?: boolean;
+  sponsorblock?: boolean;
+  chapterTemplate?: string;
+  ytdlOptionsPresets?: string[];
+  ytdlOptionsOverrides?: string;
   clipStart?: string;
   clipEnd?: string;
 }
@@ -138,20 +140,9 @@ export class DownloadsService {
       url: payload.url,
       quality: payload.quality,
       format: payload.format,
-      folder: payload.folder,
-      custom_name_prefix: payload.customNamePrefix,
-      playlist_item_limit: payload.playlistItemLimit,
-      auto_start: payload.autoStart,
-      split_by_chapters: payload.splitByChapters,
-      sponsorblock: payload.sponsorblock,
-      chapter_template: payload.chapterTemplate,
-      ytdl_options_presets: payload.ytdlOptionsPresets,
-      ytdl_options_overrides: payload.ytdlOptionsOverrides,
+      playlist_item_limit: 0,
+      auto_start: true,
     };
-    const cs = payload.clipStart?.trim();
-    const ce = payload.clipEnd?.trim();
-    if (cs) body['clip_start'] = cs;
-    if (ce) body['clip_end'] = ce;
     return this.http.post<Status>('add', body).pipe(
       catchError(this.handleHTTPError)
     );
@@ -192,6 +183,31 @@ export class DownloadsService {
       }
     }
     return this.http.post<Status>('delete', {where: where, ids: ids}).pipe(
+      tap((res) => {
+        if (res?.status === 'error') {
+          if (map) {
+            for (const id of ids) {
+              const obj = map.get(id);
+              if (obj) {
+                obj.deleting = false;
+              }
+            }
+          }
+          (where === 'queue' ? this.queueChanged : this.doneChanged).next();
+          return;
+        }
+
+        // Cancel is asynchronous in the backend: yt-dlp/ffmpeg may take a few
+        // seconds to finish signal handling and cleanup. Once the server accepts
+        // the cancel request, remove the active History row immediately instead
+        // of leaving it disabled and apparently frozen until the socket event.
+        if (where === 'queue') {
+          for (const id of ids) {
+            this.queue.delete(id);
+          }
+          this.queueChanged.next();
+        }
+      }),
       catchError((err: HttpErrorResponse) => {
         // Request failed — the rows would otherwise stay disabled forever
         // with no way to retry, since nothing ever clears `deleting`.

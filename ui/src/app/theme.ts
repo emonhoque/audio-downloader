@@ -1,6 +1,5 @@
-import { faCircleHalfStroke, faMoon, faSun  } from "@fortawesome/free-solid-svg-icons";
+import { faMoon, faSun } from "@fortawesome/free-solid-svg-icons";
 import { Theme } from "./interfaces/theme";
-
 
 export const Themes: Theme[] = [
   {
@@ -12,10 +11,5 @@ export const Themes: Theme[] = [
     id: 'dark',
     displayName: 'Dark',
     icon: faMoon,
-  },
-  {
-    id: 'auto',
-    displayName: 'Auto',
-    icon: faCircleHalfStroke,
   },
 ];

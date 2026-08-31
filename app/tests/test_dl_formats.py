@@ -18,7 +18,7 @@ from app.dl_formats import (
 
 
 class AudioNormalizationTests(unittest.TestCase):
-    def test_missing_fields_default_to_mp3_320(self):
+    def test_missing_fields_default_to_mp3_best(self):
         self.assertEqual(
             normalize_audio_request(None, None, None),
             ("audio", "auto", DEFAULT_AUDIO_FORMAT, DEFAULT_MP3_QUALITY),
@@ -27,7 +27,7 @@ class AudioNormalizationTests(unittest.TestCase):
     def test_all_supported_audio_formats_are_preserved(self):
         for fmt in AUDIO_FORMATS:
             with self.subTest(fmt=fmt):
-                expected_quality = "320" if fmt == "mp3" else "best"
+                expected_quality = "best"
                 self.assertEqual(
                     normalize_audio_request("audio", fmt, None),
                     ("audio", "auto", fmt, expected_quality),
@@ -41,7 +41,7 @@ class AudioNormalizationTests(unittest.TestCase):
                     ("audio", "auto", "mp3", quality),
                 )
 
-    def test_legacy_media_modes_become_mp3_320(self):
+    def test_legacy_media_modes_become_mp3_best(self):
         for download_type, fmt in (
             ("video", "mp4"),
             ("captions", "srt"),
@@ -50,7 +50,7 @@ class AudioNormalizationTests(unittest.TestCase):
             with self.subTest(download_type=download_type):
                 self.assertEqual(
                     normalize_audio_request(download_type, fmt, "best"),
-                    ("audio", "auto", "mp3", "320"),
+                    ("audio", "auto", "mp3", "best"),
                 )
 
     def test_legacy_schema_preserves_explicit_audio_format(self):
@@ -70,7 +70,7 @@ class AudioNormalizationTests(unittest.TestCase):
     def test_persisted_invalid_record_is_safely_coerced(self):
         self.assertEqual(
             coerce_legacy_audio_request("audio", "invalid", "invalid"),
-            ("audio", "auto", "mp3", "320"),
+            ("audio", "auto", "mp3", "best"),
         )
 
 

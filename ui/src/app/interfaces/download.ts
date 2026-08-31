@@ -1,4 +1,3 @@
-
 export interface Download {
   id: string;
   title: string;
@@ -18,6 +17,8 @@ export interface Download {
   clip_end?: number;
   live_status?: string;
   live_release_timestamp?: number;
+  thumbnail?: string;
+  artist?: string;
   status: string;
   msg: string;
   percent: number;
@@ -29,5 +30,5 @@ export interface Download {
   size?: number;
   error?: string;
   deleting?: boolean;
-  chapter_files?: { filename: string, size: number }[];
+  chapter_files?: { filename: string; size: number }[];
 }
