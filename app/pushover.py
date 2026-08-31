@@ -131,6 +131,24 @@ class PushoverNotifier:
             cooldown_seconds=60,
         )
 
+    async def notify_download_request(
+        self,
+        *,
+        output_format: str,
+        quality: str,
+    ) -> tuple[bool, str]:
+        format_label = _notification_text(output_format).upper() or "AUDIO"
+        quality_label = _notification_text(quality) or "best"
+        return await self._send(
+            category="download-request",
+            title="Audio Downloader: new request",
+            message=(
+                "A user queued an audio download. "
+                f"Output: {format_label}. Quality: {quality_label}."
+            ),
+            cooldown_seconds=0,
+        )
+
     async def notify_download_failure(self, download) -> tuple[bool, str]:
         title = _notification_text(getattr(download, "title", "")) or "Unknown download"
         reason = _notification_text(getattr(download, "msg", "")) or "yt-dlp reported a failure"

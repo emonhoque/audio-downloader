@@ -62,14 +62,38 @@ def _json_request(body: dict | None):
 
 
 @pytest.mark.asyncio
-async def test_add_ok(mock_dqueue):
+async def test_add_ok_schedules_usage_notification(mock_dqueue, monkeypatch):
+    notify = AsyncMock(return_value=(True, "sent"))
+    tasks = []
+
+    def capture_task(coro, *, name=None):
+        task = asyncio.create_task(coro, name=name)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(main.pushover, "notify_download_request", notify)
+    monkeypatch.setattr(main.bg_tasks, "create_task", capture_task)
     req = _json_request(_valid_video_add_body())
     resp = await main.add(req)
+    await asyncio.gather(*tasks)
     assert resp.status == 200
     text = resp.text
     data = json.loads(text)
     assert data["status"] == "ok"
     mock_dqueue.add.assert_awaited_once()
+    notify.assert_awaited_once_with(output_format="mp3", quality="best")
+
+
+@pytest.mark.asyncio
+async def test_add_error_does_not_schedule_usage_notification(mock_dqueue, monkeypatch):
+    mock_dqueue.add.return_value = {"status": "error", "msg": "unsupported"}
+    notify = AsyncMock(return_value=(True, "sent"))
+    monkeypatch.setattr(main.pushover, "notify_download_request", notify)
+
+    resp = await main.add(_json_request(_valid_video_add_body()))
+
+    assert json.loads(resp.text)["status"] == "error"
+    notify.assert_not_awaited()
 
 
 @pytest.mark.asyncio

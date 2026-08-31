@@ -191,6 +191,8 @@ Never put either value in frontend code or commit them to the repository.
 
 When configured:
 
+- Every accepted download request triggers one administrator alert, including
+  one alert for a playlist submission rather than one alert per playlist item.
 - Failed downloads can trigger automatic administrator alerts.
 - Automatic failure alerts share a five-minute cooldown.
 - Manual **Something's broken** reports have a separate one-minute cooldown.

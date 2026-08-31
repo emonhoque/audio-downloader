@@ -86,6 +86,24 @@ async def test_download_failure_posts_credentials_and_redacts_urls():
 
 
 @pytest.mark.asyncio
+async def test_download_request_is_sent_every_time_without_source_url():
+    factory = FakeSessionFactory()
+    notifier = PushoverNotifier("app-token", "user-key", session_factory=factory)
+
+    first = await notifier.notify_download_request(output_format="mp3", quality="320")
+    second = await notifier.notify_download_request(output_format="mp3", quality="320")
+
+    assert first[0] is True
+    assert second[0] is True
+    assert len(factory.session.posts) == 2
+    for _url, data in factory.session.posts:
+        assert data["title"] == "Audio Downloader: new request"
+        assert "Output: MP3" in data["message"]
+        assert "Quality: 320" in data["message"]
+        assert "http" not in data["message"].lower()
+
+
+@pytest.mark.asyncio
 async def test_successful_notifications_are_throttled_by_category():
     now = [100.0]
     factory = FakeSessionFactory()

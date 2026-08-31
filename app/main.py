@@ -893,6 +893,14 @@ async def add(request):
         o['clip_end'],
         sponsorblock=o['sponsorblock'],
     )
+    if isinstance(status, dict) and status.get('status') == 'ok':
+        bg_tasks.create_task(
+            pushover.notify_download_request(
+                output_format=o['format'],
+                quality=o['quality'],
+            ),
+            name='notify_pushover_download_request',
+        )
     return web.Response(text=serializer.encode(status))
 
 
