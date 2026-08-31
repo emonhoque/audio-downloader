@@ -6,10 +6,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="assets/icons/audio-downloader.svg">
   <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
-  <meta name="theme-color" content="#212529">
+  <meta name="theme-color" content="#0f1715">
 </head>
 <body>
   <app-root></app-root>
   <noscript>Please enable JavaScript to continue using this application.</noscript>
+  <script>
+    document.addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-paste-url]');
+      if (!button || button.disabled) return;
+
+      const input = document.querySelector('input[aria-label="Media URL"]');
+      if (!input) return;
+
+      try {
+        const text = await navigator.clipboard.readText();
+        const value = text.trim();
+        if (!value) return;
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+      } catch {
+        input.focus();
+      }
+    });
+  </script>
 </body>
 </html>

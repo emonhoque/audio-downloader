@@ -712,7 +712,7 @@ class SponsorBlockPostprocessorTests(unittest.TestCase):
         self.assertFalse(params['keepvideo'])
         extract = next(pp for pp in params['postprocessors'] if pp['key'] == 'FFmpegExtractAudio')
         self.assertEqual(extract['preferredcodec'], 'mp3')
-        self.assertEqual(extract['preferredquality'], '320')
+        self.assertEqual(extract['preferredquality'], 0)
 
     def test_no_sponsorblock_postprocessors_when_disabled(self):
         download = _make_test_download()
@@ -1147,7 +1147,7 @@ class DownloadInfoSetstateTests(unittest.TestCase):
         di.__setstate__(state)
         self.assertEqual(di.download_type, "audio")
         self.assertEqual(di.format, "mp3")
-        self.assertEqual(di.quality, "320")
+        self.assertEqual(di.quality, "best")
 
     def test_new_state_has_subtitle_files(self):
         state = self._base_state(

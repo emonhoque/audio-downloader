@@ -1,134 +1,185 @@
-# MeTube Audio
+# Audio Downloader
 
-This repository is an audio-only fork of [MeTube](https://github.com/alexta69/metube),
-a self-hosted web interface for [yt-dlp](https://github.com/yt-dlp/yt-dlp). It keeps
-MeTube's queue, playlists, channels, subscriptions, persistent state, cookies,
-advanced yt-dlp options, Socket.IO updates, and Docker deployment while making audio
-the only supported media output.
+Audio Downloader is an audio-only fork of [MeTube](https://github.com/alexta69/metube), built around [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
-## What This Fork Does
+The goal is simple: paste a supported URL, choose an audio format if you want something other than the default, and get a correctly written audio file. Video, caption-only, and thumbnail-only downloads are intentionally not part of this fork.
 
-Paste any URL supported by yt-dlp, choose an audio format if desired, and download.
-Playlist and channel URLs enqueue their individual audio items. Subscriptions poll for
-new items and use the same audio settings. Retries preserve an explicit supported
-audio choice; ambiguous and historical video settings become the product default.
+## Highlights
 
-The backend is authoritative. Old clients may still send compatibility fields such as
-`download_type=video`, a video codec, resolution, caption mode, or thumbnail mode, but
-those values cannot create a video, caption-only, or thumbnail-only download. They are
-normalized to the default audio request.
+- Audio-only download pipeline enforced by the backend.
+- MP3 at 320 kbps by default.
+- MP3, M4A, Opus, FLAC, and WAV output.
+- Redesigned responsive Audio Downloader UI.
+- Playlist and channel URL support through yt-dlp.
+- Persistent queue and download history.
+- Searchable and sortable History with thumbnails, source icons, file details, retry, redownload, delete, and source links.
+- Downloading panel appears only while work exists and moves below History on mobile.
+- Duplicate URL detection for previously downloaded items.
+- Paste-from-clipboard support.
+- Conservative music metadata enrichment using only metadata already supplied by yt-dlp.
+- Automatic yt-dlp updates in running containers.
+- Daily repository-level yt-dlp dependency updates and multi-architecture GHCR builds.
+- Optional server-side administrator notifications for failed downloads and manual problem reports.
+- Light, dark, and automatic themes.
 
 ## Default Behavior
 
-**Downloads are saved as MP3 by default. Other supported audio formats can be selected
-manually before downloading.**
-
-Simply paste a URL and click **Download** to get MP3. This default applies independently
-in the frontend and backend, including direct API requests with only a URL, playlist and
-channel items, new subscriptions, retries, restored downloads, bookmarklets, and older
-clients.
-
-Format precedence is:
-
-1. An explicit, supported audio format selected for the current download.
-2. A previously saved supported audio selection in the web UI or subscription record.
-3. MP3.
-
-An unsupported explicit audio format is rejected. Obsolete or ambiguous legacy media
-settings safely fall back to MP3.
-
-## Audio Formats
-
-The UI exposes formats supported by the existing yt-dlp/FFmpeg audio pipeline:
-
-- **MP3** — default; 320, 192, or 128 kbps.
-- **M4A** — Best, 192, or 128 kbps.
-- **Opus** — Best.
-- **FLAC** — Best.
-- **WAV** — Best.
-
-"Best" lets yt-dlp/FFmpeg use the selected output codec without applying a numeric
-bitrate target. When the downloaded source is already compatible, yt-dlp can avoid an
-unnecessary conversion; otherwise FFmpeg produces the requested format. WAV does not
-embed artwork because that path is not reliably supported. Compatible formats retain
-MeTube's metadata and artwork behavior.
-
-## MP3 Quality
-
-The default is **320 kbps**. MeTube passes `preferredquality=320` to yt-dlp's
-`FFmpegExtractAudio` postprocessor, which asks FFmpeg for `-b:a 320k`. This is a target
-output bitrate; it cannot restore detail absent from the source. Lower 192 and 128 kbps
-settings are available intentionally in the format selector.
-
-## Conversion Behavior
-
-Every download uses an audio-only yt-dlp selector and the existing FFmpeg extraction
-postprocessor:
+The default download is:
 
 ```text
-best available source audio -> FFmpegExtractAudio -> selected audio format
+Format:  MP3
+Quality: 320 kbps
 ```
 
-MP3 is intentionally the default even when a site naturally offers Opus or M4A. The
-source is downloaded directly and converted once; this fork does not introduce an
-extra lossy intermediate. Metadata, embedded artwork, chapter metadata, optional
-chapter splitting, playlist metadata, and SponsorBlock processing remain available
-where the chosen format supports them.
+A URL-only request is normalized to audio even if an older client sends legacy video fields. The backend is authoritative, so compatibility fields cannot turn this fork back into a video downloader.
 
-Global `YTDL_OPTIONS`, named presets, and per-download overrides still combine in that
-order. More specific user layers may configure extractors, authentication, proxies,
-rate limits, and other yt-dlp behavior. After those layers are merged, MeTube forces
-the audio-only source selector, enables the media download, disables retaining the
-source file, and installs the chosen FFmpeg audio conversion. Advanced options cannot
-turn the application back into a normal video downloader.
+Format selection precedence is:
 
-## Automatic yt-dlp Updating
+1. A supported audio format explicitly chosen for the current request.
+2. A previously saved supported audio selection.
+3. MP3.
 
-Automatic yt-dlp nightly updates are enabled by default at **04:00 local container
-time** through the existing `YTDL_NIGHTLY_UPDATE_TIME` mechanism.
+Unsupported explicit audio formats are rejected. Ambiguous legacy media settings fall back to MP3.
 
-At container startup, the root entrypoint:
+## Supported Audio Formats
 
-1. Logs the installed yt-dlp version.
-2. Runs a trusted `pip` upgrade for the yt-dlp nightly-compatible package and its
-   existing runtime extras.
-3. Logs whether the installed version changed.
-4. Continues with the installed version if the update service or network is unavailable.
-5. Drops privileges before starting MeTube.
+| Format | Available quality |
+| --- | --- |
+| MP3 | 320, 192, or 128 kbps |
+| M4A | Best, 192, or 128 kbps |
+| Opus | Best |
+| FLAC | Best |
+| WAV | Best |
 
-MeTube schedules the next daily check. When it becomes due, it waits for active
-downloads and postprocessing to finish, requests a graceful exit with code 42, and the
-entrypoint supervisor performs the upgrade before restarting MeTube. Queue and
-subscription state remain persisted. There is one scheduled check per process start,
-so a failed check cannot create a rapid restart loop.
+`Best` leaves the numeric bitrate target unset and lets the existing yt-dlp and FFmpeg pipeline produce the selected output format from the best available source audio.
 
-Configure the schedule with a 24-hour local time:
+The fork does not add an extra lossy intermediate. The general pipeline is:
+
+```text
+best available source audio
+        |
+        v
+yt-dlp audio selection
+        |
+        v
+FFmpegExtractAudio
+        |
+        v
+selected output format
+```
+
+MP3 at 320 kbps is a target output bitrate. It cannot restore detail that is not present in the source.
+
+## Current Web UI
+
+The main screen is intentionally focused on the download workflow rather than exposing every inherited MeTube feature at once.
+
+### Add a link
+
+The composer provides:
+
+- URL input with a Paste button.
+- Automatic source recognition and site favicon display.
+- Format and quality selectors.
+- One-click Start download action.
+- Duplicate detection when the same URL already exists in History.
+
+
+### Downloading
+
+The Downloading panel is contextual. It is not rendered when the queue is idle.
+
+While work exists it shows the active or queued jobs, state, progress, format, speed, ETA, and relevant actions. On narrow screens it appears below History rather than above it.
+
+### History
+
+Finished and failed downloads appear in History.
+
+History supports:
+
+- Search by title, artist, source, format, filename, or status.
+- Sort by newest, oldest, name, largest, or smallest.
+- Thumbnail with initials fallback.
+- Source favicon in metadata.
+- Artist or uploader when available.
+- Format, size, and timestamp metadata.
+- Download or retry as the primary row action.
+- Expandable details for filename, source URL, timestamps, errors, and chapter files.
+- Open source, download again, share where supported, copy error, and delete actions.
+
+The old permanent format and failed-status filter tabs are intentionally not part of this UI. Search and sorting handle History discovery without keeping extra navigation visible all the time.
+
+### Footer and problem reporting
+
+The footer shows the running yt-dlp version and, when available, the last yt-dlp options reload time.
+
+If administrator notifications are configured, **Something's broken** is available in the footer and as an icon-only header action. Both require confirmation before a manual notification is sent.
+
+## Music Metadata
+
+Audio Downloader performs conservative metadata enrichment at download time using only fields already supplied by yt-dlp or the queued playlist entry.
+
+When extractor metadata provides enough album context, the fork can:
+
+- Preserve or fill an album value from extractor-owned playlist metadata.
+- Preserve track number information.
+- Add a known track total when yt-dlp supplied one.
+- Fall back to playlist index for track position when an album signal already exists.
+- Prefer the largest known square thumbnail for music artwork.
+
+There are no external metadata lookups and no post-download tag editor. Site-specific album guessing is deliberately avoided.
+
+If you want library management, tag editing, or external metadata matching after download, use a dedicated tool such as beets, MusicBrainz Picard, or Lidarr.
+
+## yt-dlp Updates
+
+This fork has two separate yt-dlp update paths.
+
+### Runtime container updater
+
+`YTDL_NIGHTLY_UPDATE_TIME` defaults to `04:00` in the container's local time.
+
+When the container starts as root, the entrypoint checks for a newer pre-release-compatible yt-dlp package before starting the application. The running app also schedules the next daily check.
+
+When the scheduled update becomes due, Audio Downloader waits for active downloading and post-processing work to finish, exits intentionally with code `42`, and the entrypoint supervisor upgrades yt-dlp before restarting the app.
+
+If the update service or network is unavailable, the current installed yt-dlp remains usable.
+
+Set a different time:
 
 ```yaml
 environment:
   YTDL_NIGHTLY_UPDATE_TIME: "02:30"
 ```
 
-Disable automatic yt-dlp updates explicitly with an empty value:
+Disable runtime updating:
 
 ```yaml
 environment:
   YTDL_NIGHTLY_UPDATE_TIME: ""
 ```
 
-The updater needs write access to the system Python installation, so it runs in the
-root entrypoint before MeTube is launched as `PUID:PGID`. If Docker's `user:` setting
-bypasses the root entrypoint phase, the entrypoint logs that automatic updating is
-disabled; the application itself still runs as the configured non-root user.
+The updater writes to the system Python installation, so this update path requires the normal root entrypoint phase. If Docker's `user:` setting bypasses it, Audio Downloader still runs, but the runtime updater is disabled.
 
-Inspect versions in the startup log, with `docker exec metube-audio yt-dlp --version`,
-or through the JSON endpoint at `http://localhost:8081/version`.
+### Repository updater
 
-## Private Pushover Failure Alerts
+The repository also has a scheduled GitHub Actions workflow that checks `uv.lock` for a newer yt-dlp version every day.
 
-This private fork can notify its administrator through Pushover. Create an application
-token in Pushover, then provide that token and the destination user or group key only as
-server-side environment variables:
+When it finds an update on `master`, it:
+
+1. Updates the yt-dlp lockfile entry.
+2. Commits the new lockfile to `master`.
+3. Dispatches the normal build workflow.
+4. Runs the full quality checks.
+5. Publishes fresh `linux/amd64` and `linux/arm64` images to GHCR if validation succeeds.
+
+This keeps newly built images current while the runtime updater protects already-running containers from urgent extractor breakage between image rebuilds.
+
+## Administrator Notifications
+
+Optional administrator notifications use Pushover from the backend only.
+
+Configure both secrets on the server:
 
 ```yaml
 environment:
@@ -136,48 +187,29 @@ environment:
   PUSHOVER_USER_KEY: "${PUSHOVER_USER_KEY}"
 ```
 
-Do not commit either secret. When both values are configured:
+Never put either value in frontend code or commit them to the repository.
 
-- Every failed download is eligible for an automatic alert. Automatic failure alerts
-  share a five-minute cooldown to prevent a site-wide outage from creating a flood.
-- The footer's **Something's broken** button sends a manual alert and has its own
-  one-minute cooldown.
-- Alerts contain the download title and summarized yt-dlp error, but submitted source
-  URLs are removed before the message leaves the server.
-- Pushover timeouts, rejected credentials, and other notification errors are logged and
-  never change the result of a download.
+When configured:
 
-If either environment variable is absent, automatic alerts are disabled and the manual
-button explains that problem reporting is not configured. Because this notifier runs inside the
-application, it cannot report a container that never starts or a host that is offline;
-use an external health monitor for those failures.
+- Failed downloads can trigger automatic administrator alerts.
+- Automatic failure alerts share a five-minute cooldown.
+- Manual **Something's broken** reports have a separate one-minute cooldown.
+- Manual reports require confirmation in the UI.
+- Submitted source URLs are removed from notification text before it leaves the server.
+- Notification failures are logged and never change the result of the download itself.
 
-## Docker Usage
+If either secret is missing, notifications remain disabled.
 
-Build this fork locally so the image contains this audio-only UI and backend:
+This mechanism cannot report a host or container that never started. Use an external uptime or infrastructure monitor for those failures.
 
-```bash
-docker build -t metube-audio:local .
-```
+## Docker
 
-Run it directly:
-
-```bash
-docker run -d \
-  --name metube-audio \
-  --restart unless-stopped \
-  -p 8081:8081 \
-  -v /path/to/downloads:/downloads \
-  metube-audio:local
-```
-
-Or use Docker Compose:
+### Use the published image
 
 ```yaml
 services:
   metube:
-    build: .
-    image: metube-audio:local
+    image: ghcr.io/emonhoque/metube:latest
     container_name: metube-audio
     restart: unless-stopped
     ports:
@@ -188,130 +220,140 @@ services:
       PUID: "1000"
       PGID: "1000"
       YTDL_NIGHTLY_UPDATE_TIME: "04:00"
-      PUSHOVER_APP_TOKEN: "${PUSHOVER_APP_TOKEN}"
-      PUSHOVER_USER_KEY: "${PUSHOVER_USER_KEY}"
 ```
 
-The image includes Python 3.13, yt-dlp, FFmpeg, the built Angular UI, Deno, aria2,
-the existing BgUtils POT provider, `tini`, and `gosu`. It exposes port 8081, persists
-downloads and state under `/downloads`, and includes the existing HTTP health check.
+Then open:
+
+```text
+http://localhost:8081
+```
+
+### Build locally
+
+```bash
+docker build -t metube-audio:local .
+```
+
+```bash
+docker run -d \
+  --name metube-audio \
+  --restart unless-stopped \
+  -p 8081:8081 \
+  -v /path/to/downloads:/downloads \
+  metube-audio:local
+```
+
+The image is built with a Node 22 frontend stage and a Python 3.13 runtime. It includes FFmpeg, yt-dlp, Deno, aria2, the BgUtils POT provider, `tini`, and `gosu`.
+
+The container exposes port `8081`, stores state under `/downloads/.metube` by default, and includes an HTTP or HTTPS-aware health check.
 
 ## Configuration
 
-Environment variables can be supplied with `docker run -e` or Compose's
-`environment:` section.
+Environment variables can be supplied through Docker Compose or `docker run -e`.
 
 ### Runtime and permissions
 
-- `PUID`, `PGID` — user and group used for MeTube. Both default to `1000`; legacy
-  `UID` and `GID` remain supported.
-- `UMASK` — file-creation mask, default `022`.
-- `CHOWN_DIRS` — set to `false` to skip startup ownership changes. The configured
-  user must already be able to write all mounted directories.
-- `LOGLEVEL` — `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, or `NONE`; default
-  `INFO`.
-- `ENABLE_ACCESSLOG` — enable HTTP access logs; default `false`.
-- `DEFAULT_THEME` — `light`, `dark`, or `auto`; default `auto`.
-- `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY` — optional server-side Pushover
-  credentials for manual and automatic failure alerts. Both are required to enable
-  notifications and are never sent to the browser.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PUID` | `1000` | Runtime user ID |
+| `PGID` | `1000` | Runtime group ID |
+| `UMASK` | `022` | File creation mask |
+| `CHOWN_DIRS` | `true` | Set to `false` to skip startup ownership changes |
+| `LOGLEVEL` | `INFO` | Application log level |
+| `ENABLE_ACCESSLOG` | `false` | Enable HTTP access logging |
+| `DEFAULT_THEME` | `auto` | `light`, `dark`, or `auto` |
+
+Legacy `UID` and `GID` values remain accepted by the entrypoint.
 
 ### Download behavior
 
-- `MAX_CONCURRENT_DOWNLOADS` — concurrent workers; default `3`.
-- `DEFAULT_OPTION_PLAYLIST_ITEM_LIMIT` — default playlist/channel item limit;
-  `0` means unlimited.
-- `CLEAR_COMPLETED_AFTER` — seconds before history items are cleared; `0` disables.
-- `DELETE_FILE_ON_TRASHCAN` — also remove the media file when clearing it from the
-  completed list; default `false`.
-- `SUBSCRIPTION_DEFAULT_CHECK_INTERVAL` — default polling interval in minutes;
-  default `60`.
-- `SUBSCRIPTION_SCAN_PLAYLIST_END` — newest entries inspected per check; default `50`.
-- `SUBSCRIPTION_MAX_SEEN_IDS` — maximum remembered IDs per subscription; default
-  `50000`.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MAX_CONCURRENT_DOWNLOADS` | `3` | Concurrent download workers |
+| `DEFAULT_OPTION_PLAYLIST_ITEM_LIMIT` | `0` | Default playlist or channel item limit, with `0` meaning unlimited |
+| `CLEAR_COMPLETED_AFTER` | `0` | Seconds before completed History entries are cleared |
+| `DELETE_FILE_ON_TRASHCAN` | `false` | Also delete the media file when removing a completed item |
+| `DEFAULT_FOLDER` | empty | Initial relative folder when custom directories are enabled |
 
 ### Storage and naming
 
-- `DOWNLOAD_DIR` — base media directory; `/downloads` in Docker.
-- `AUDIO_DOWNLOAD_DIR` — audio output directory; defaults to `DOWNLOAD_DIR`.
-- `STATE_DIR` — persistent queue, history, and subscription state; defaults to
-  `/downloads/.metube` in Docker.
-- `TEMP_DIR` — intermediate files; defaults to `/downloads` in Docker. Using volatile
-  storage can prevent resuming an interrupted download.
-- `CUSTOM_DIRS` — enable the per-download folder field; default `true`.
-- `CREATE_CUSTOM_DIRS` — allow creating relative subdirectories; default `true`.
-- `CUSTOM_DIRS_EXCLUDE_REGEX` — filters folder suggestions; default
-  `(^|/)[.@].*$`.
-- `DEFAULT_FOLDER` — initial relative folder selection when custom directories are
-  enabled.
-- `DOWNLOAD_DIRS_INDEXABLE` — expose directory indexes; default `false`.
-- `OUTPUT_TEMPLATE` — default `%(title)s.%(ext)s`.
-- `OUTPUT_TEMPLATE_CHAPTER` — default
-  `%(title)s - %(section_number)s %(section_title)s.%(ext)s`.
-- `OUTPUT_TEMPLATE_PLAYLIST` — default
-  `%(playlist_title)s/%(title)s.%(ext)s`.
-- `OUTPUT_TEMPLATE_CHANNEL` — default `%(channel)s/%(title)s.%(ext)s`.
+| Variable | Docker default | Purpose |
+| --- | --- | --- |
+| `DOWNLOAD_DIR` | `/downloads` | Base download directory |
+| `AUDIO_DOWNLOAD_DIR` | `DOWNLOAD_DIR` | Audio output directory |
+| `STATE_DIR` | `/downloads/.metube` | Persistent queue, History, and inherited subscription state |
+| `TEMP_DIR` | `/downloads` | Temporary and resumable download files |
+| `CUSTOM_DIRS` | `true` | Enable relative per-download folders |
+| `CREATE_CUSTOM_DIRS` | `true` | Allow new relative folders |
+| `CUSTOM_DIRS_EXCLUDE_REGEX` | `(^|/)[.@].*$` | Filter folder suggestions |
+| `DOWNLOAD_DIRS_INDEXABLE` | `false` | Enable directory indexes |
 
-Paths derived from URLs or extractor metadata continue through MeTube's directory
-containment and path-component sanitization. Old video records remain readable for
-history, but any new queue item derived from them is stored under the audio directory.
+Naming templates:
 
-### yt-dlp, authentication, and networking
+```text
+OUTPUT_TEMPLATE=%(title)s.%(ext)s
+OUTPUT_TEMPLATE_CHAPTER=%(title)s - %(section_number)02d - %(section_title)s.%(ext)s
+OUTPUT_TEMPLATE_PLAYLIST=%(playlist_title)s/%(title)s.%(ext)s
+OUTPUT_TEMPLATE_CHANNEL=%(channel)s/%(title)s.%(ext)s
+```
 
-- `YTDL_OPTIONS` — global yt-dlp API options as a JSON object.
-- `YTDL_OPTIONS_FILE` — JSON options file, reloaded when it changes.
-- `YTDL_OPTIONS_PRESETS` — named JSON option bundles shown in Advanced Options.
-- `YTDL_OPTIONS_PRESETS_FILE` — reloadable presets file.
-- `ALLOW_YTDL_OPTIONS_OVERRIDES` — expose per-download free-form JSON options;
-  default `false`. This should only be enabled for trusted users because yt-dlp has
-  options capable of executing commands.
-- `YTDL_NIGHTLY_UPDATE_TIME` — daily update time in `HH:MM`; default `04:00`;
-  empty disables.
-- `ALLOW_PRIVATE_ADDRESSES` — disable SSRF address restrictions; default `false`.
-  Enable only in a trusted network environment.
+All relative output paths continue through MeTube's directory containment and path sanitization logic.
 
-The UI can upload a Netscape-format `cookies.txt` file under Advanced Options. Uploaded
-cookies are stored with owner-only permissions and can be deleted from the same UI.
-Proxy, extractor, authentication, and cookie-file settings in `YTDL_OPTIONS` remain
-supported.
+### yt-dlp options
 
-Example global options:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `YTDL_OPTIONS` | `{}` | Global yt-dlp API options as JSON |
+| `YTDL_OPTIONS_FILE` | empty | JSON options file that can be reloaded |
+| `YTDL_OPTIONS_PRESETS` | `{}` | Named option bundles |
+| `YTDL_OPTIONS_PRESETS_FILE` | empty | Reloadable preset file |
+| `ALLOW_YTDL_OPTIONS_OVERRIDES` | `false` | Allow trusted per-download JSON overrides |
+| `YTDL_NIGHTLY_UPDATE_TIME` | `04:00` | Daily runtime yt-dlp update time |
+| `ALLOW_PRIVATE_ADDRESSES` | `false` | Permit private destination addresses in submitted URLs |
+
+Example:
 
 ```yaml
 environment:
   YTDL_OPTIONS: '{"proxy":"http://proxy:8080","ratelimit":5000000}'
 ```
 
-Presets and overrides are layered over global options, but the fork's mandatory audio
-selector and conversion settings win where required to preserve the audio-only
-contract.
+`ALLOW_YTDL_OPTIONS_OVERRIDES` should only be enabled for trusted users. yt-dlp exposes options that can execute commands or otherwise change server behavior.
 
-### Web server
+The fork merges configured yt-dlp layers but still enforces the mandatory audio-only selector and audio conversion rules.
 
-- `HOST` — bind address; Docker defaults to `0.0.0.0`. Use `*` or empty for both
-  address families.
-- `PORT` — default `8081`.
-- `URL_PREFIX` — serve under a path prefix when using a reverse proxy.
-- `PUBLIC_HOST_URL`, `PUBLIC_HOST_AUDIO_URL` — public download-link bases.
-- `HTTPS`, `CERTFILE`, `KEYFILE` — native TLS settings.
-- `CORS_ALLOWED_ORIGINS` — comma-separated trusted origins for extensions and
-  bookmarklets. `*` never grants credentialed CORS requests.
-- `ROBOTS_TXT` — path to a mounted `robots.txt`.
+### Cookies
 
-MeTube uses WebSocket connections for live queue updates. A reverse proxy must pass
-the `Upgrade` and `Connection` headers.
+The UI can upload a Netscape-format `cookies.txt` file from Advanced Options. Uploaded cookies are stored server-side with restricted permissions and can be removed from the same UI.
 
-## Sending Links to MeTube
+### Web server and reverse proxy
 
-Existing MeTube browser extensions, bookmarklets, iOS shortcuts, and API clients can
-still submit URLs. Older clients may send the retired media fields; the backend
-normalizes them to MP3 audio. Configure `CORS_ALLOWED_ORIGINS` for browser-originated
-requests, and use HTTPS when the source page is HTTPS.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `HOST` | `0.0.0.0` | Bind address |
+| `PORT` | `8081` | Listen port |
+| `URL_PREFIX` | empty | Serve below a reverse-proxy path prefix |
+| `PUBLIC_HOST_URL` | `download/` | Public generic download-link base |
+| `PUBLIC_HOST_AUDIO_URL` | `audio_download/` | Public audio download-link base |
+| `HTTPS` | `false` | Enable native TLS |
+| `CERTFILE` | empty | TLS certificate |
+| `KEYFILE` | empty | TLS private key |
+| `CORS_ALLOWED_ORIGINS` | empty | Trusted browser origins |
+| `ROBOTS_TXT` | empty | Optional mounted robots.txt |
 
-## Development and Testing
+Socket.IO is used for live queue updates. Reverse proxies must support WebSocket upgrade headers.
 
-The supported local toolchain is Node.js 22+, pnpm, Python 3.13+, and uv. Build the UI
-before backend tests because the server imports the generated static assets.
+## Compatibility and Inherited MeTube Features
+
+The backend still contains inherited MeTube queue, state, playlist, channel, and subscription infrastructure. The current redesigned frontend is intentionally centered on direct URL downloading, active work, and History rather than exposing a separate subscription dashboard.
+
+Existing API clients, bookmarklets, shortcuts, and older MeTube clients can continue to submit URLs. Legacy media-type fields are normalized so they cannot bypass the audio-only contract.
+
+## Development
+
+### Frontend
+
+Requires Node.js 22+ and pnpm.
 
 ```bash
 cd ui
@@ -319,24 +361,50 @@ pnpm install --frozen-lockfile
 pnpm run lint
 pnpm run build
 pnpm exec ng test --watch=false
+```
 
-cd ..
+### Backend
+
+Requires Python 3.13+ and uv.
+
+Build the frontend first because backend tests import the generated static assets.
+
+```bash
 uv sync --frozen --group dev
 python -m compileall app
 uv run pytest app/tests/
 ```
 
-Build the complete deployment image with:
+### Complete image
 
 ```bash
 docker build -t metube-audio:test .
 ```
 
+The main GitHub Actions workflow performs frontend linting, frontend build and tests, Python compilation, backend tests, and a Trivy filesystem scan before publishing a multi-architecture image.
+
+## Project Scope
+
+This fork follows the same narrow product boundary as MeTube: give it a URL, run yt-dlp correctly, and write the requested file correctly.
+
+In scope:
+
+- Download workflow improvements.
+- yt-dlp-owned functionality exposed in the UI.
+- Better use of metadata yt-dlp already provides.
+- Correct metadata and artwork written during the download.
+- Queue, History, playlist, channel, and inherited subscription behavior.
+
+Out of scope:
+
+- Post-download tag editors.
+- External music metadata services.
+- Media-library management.
+- Reorganizing already-downloaded files.
+- Site-specific metadata guessing that belongs in yt-dlp extractors.
+
 ## Upstream
 
-This project is based on [MeTube by alexta69 and its contributors](https://github.com/alexta69/metube).
-It preserves the upstream license, architecture, security model, and attribution. The
-fork-specific product contract is deliberately narrow: give MeTube a supported URL and
-write the requested audio file correctly. Post-download tag editing, external metadata
-lookups, and library organization remain jobs for tools such as beets, MusicBrainz
-Picard, or Lidarr.
+Audio Downloader is based on [MeTube by alexta69 and its contributors](https://github.com/alexta69/metube).
+
+The upstream license, architecture, and attribution are preserved. This fork intentionally changes the product contract from a general video downloader to a focused audio downloader while continuing to use MeTube and yt-dlp as the underlying download engine.

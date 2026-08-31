@@ -27,19 +27,8 @@ class MeTubeSocketStub {
 function basePayload(): AddDownloadPayload {
   return {
     url: 'https://example.com/v',
-    quality: '320',
+    quality: 'best',
     format: 'mp3',
-    folder: '',
-    customNamePrefix: '',
-    playlistItemLimit: 0,
-    autoStart: true,
-    splitByChapters: false,
-    sponsorblock: false,
-    chapterTemplate: '',
-    ytdlOptionsPresets: [],
-    ytdlOptionsOverrides: '',
-    clipStart: '',
-    clipEnd: '',
   };
 }
 
@@ -63,45 +52,24 @@ describe('DownloadsService', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  it('add() posts snake_case fields matching backend', () => {
+  it('add() sends only visible choices plus fixed safe execution defaults', () => {
     service.add(basePayload()).subscribe();
     const req = httpMock.expectOne('add');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual(
-      expect.objectContaining({
-        url: 'https://example.com/v',
-        quality: '320',
-        format: 'mp3',
-        playlist_item_limit: 0,
-        auto_start: true,
-        split_by_chapters: false,
-        chapter_template: '',
-        ytdl_options_presets: [],
-        ytdl_options_overrides: '',
-      }),
-    );
-    expect(req.request.body['download_type']).toBeUndefined();
-    expect(req.request.body['codec']).toBeUndefined();
-    expect(req.request.body['subtitle_language']).toBeUndefined();
-    expect(req.request.body['subtitle_mode']).toBeUndefined();
-    req.flush({ status: 'ok' });
-  });
-
-  it('add() sends clip_start and clip_end when set', () => {
-    service
-      .add({
-        ...basePayload(),
-        clipStart: '1:00',
-        clipEnd: '2:00',
-      })
-      .subscribe();
-    const req = httpMock.expectOne('add');
-    expect(req.request.body).toEqual(
-      expect.objectContaining({
-        clip_start: '1:00',
-        clip_end: '2:00',
-      }),
-    );
+    expect(req.request.body).toEqual({
+      url: 'https://example.com/v',
+      quality: 'best',
+      format: 'mp3',
+      playlist_item_limit: 0,
+      auto_start: true,
+    });
+    expect(req.request.body['folder']).toBeUndefined();
+    expect(req.request.body['clip_start']).toBeUndefined();
+    expect(req.request.body['clip_end']).toBeUndefined();
+    expect(req.request.body['split_by_chapters']).toBeUndefined();
+    expect(req.request.body['sponsorblock']).toBeUndefined();
+    expect(req.request.body['ytdl_options_presets']).toBeUndefined();
+    expect(req.request.body['ytdl_options_overrides']).toBeUndefined();
     req.flush({ status: 'ok' });
   });
 
@@ -144,7 +112,7 @@ describe('DownloadsService', () => {
     req.flush({});
   });
 
-  it('delById marks items deleting and posts delete', () => {
+  it('delById removes an active row as soon as cancel is accepted', () => {
     const dl: Download = {
       id: '1',
       title: 't',
@@ -165,11 +133,15 @@ describe('DownloadsService', () => {
       deleting: false,
     };
     service.queue.set('u1', dl);
+    let queueChangedCount = 0;
+    service.queueChanged.subscribe(() => queueChangedCount++);
     service.delById('queue', ['u1']).subscribe();
     expect(dl.deleting).toBe(true);
     const req = httpMock.expectOne('delete');
     expect(req.request.body).toEqual({ where: 'queue', ids: ['u1'] });
-    req.flush({});
+    req.flush({ status: 'ok' });
+    expect(service.queue.has('u1')).toBe(false);
+    expect(queueChangedCount).toBeGreaterThan(0);
   });
 
   it('delById resets deleting flag and emits error status on HTTP failure', () => {

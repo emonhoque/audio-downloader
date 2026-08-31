@@ -480,38 +480,72 @@ def _clip_field_provided_in_post(raw) -> bool:
     return True
 
 
-def _extract_t_query_from_url(url: str) -> tuple[str, float | None]:
-    """If ``t=`` is present and parseable, return URL without ``t`` and start seconds.
+_YOUTUBE_PLAYBACK_OFFSET_KEYS = frozenset({'t', 'start', 'time_continue', 'end'})
 
-    Restricted to YouTube hosts: ``t`` is a generic query parameter name that
-    other sites may use for unrelated purposes, so rewriting it there would
-    silently mutate the URL and inject a bogus clip start.
+
+def _extract_t_query_from_url(url: str) -> tuple[str, float | None]:
+    """Strip YouTube playback offsets without changing download range.
+
+    Shared YouTube links commonly include ``t=``/``start=`` parameters that only
+    describe where playback should begin. This audio-only fork always downloads
+    the complete media unless an API caller explicitly supplies clip fields, so
+    playback offsets are removed from YouTube URLs instead of becoming clips.
+
+    The second return value retains a parseable ``t`` value for backwards helper
+    compatibility, but the primary add path deliberately ignores it.
     """
     try:
         parsed = urlparse(url)
-        params = parse_qs(parsed.query)
+        params = parse_qs(parsed.query, keep_blank_values=True)
     except Exception:
         return url, None
     host = (parsed.hostname or '').lower()
     if not (host in ('youtu.be', 'youtube.com') or host.endswith('.youtube.com')):
         return url, None
+
+    parsed_t = None
     t_values = params.get('t')
-    if not t_values:
+    if t_values:
+        parsed_t = _parse_youtube_t_compact(t_values[0])
+
+    had_offset = any(key in params for key in _YOUTUBE_PLAYBACK_OFFSET_KEYS)
+    filtered = {
+        key: values
+        for key, values in params.items()
+        if key not in _YOUTUBE_PLAYBACK_OFFSET_KEYS
+    }
+
+    fragment = parsed.fragment
+    if fragment:
+        try:
+            fragment_params = parse_qs(fragment, keep_blank_values=True)
+        except Exception:
+            fragment_params = {}
+        if any(key in fragment_params for key in _YOUTUBE_PLAYBACK_OFFSET_KEYS):
+            had_offset = True
+            if parsed_t is None and fragment_params.get('t'):
+                parsed_t = _parse_youtube_t_compact(fragment_params['t'][0])
+            fragment = urlencode(
+                {
+                    key: values
+                    for key, values in fragment_params.items()
+                    if key not in _YOUTUBE_PLAYBACK_OFFSET_KEYS
+                },
+                doseq=True,
+            )
+
+    if not had_offset:
         return url, None
-    start = _parse_youtube_t_compact(t_values[0])
-    if start is None:
-        return url, None
-    filtered = {k: v for k, v in params.items() if k != 't'}
-    new_query = urlencode(filtered, doseq=True)
+
     cleaned = urlunparse((
         parsed.scheme,
         parsed.netloc,
         parsed.path,
         parsed.params,
-        new_query,
-        parsed.fragment,
+        urlencode(filtered, doseq=True),
+        fragment,
     ))
-    return cleaned, float(start)
+    return cleaned, float(parsed_t) if parsed_t is not None else None
 
 
 def _parse_ytdl_options_presets(post: dict) -> list[str]:
@@ -778,9 +812,8 @@ def parse_download_options(post: dict) -> dict:
     clip_end_raw = post.get('clip_end')
     clip_start: float | None
     clip_end: float | None
-    cleaned_url, url_t = _extract_t_query_from_url(url)
-    if url_t is not None:
-        url = cleaned_url
+    cleaned_url, _url_t = _extract_t_query_from_url(url)
+    url = cleaned_url
     explicit_start = _optional_clip_field(clip_start_raw)
     explicit_end = _optional_clip_field(clip_end_raw)
     explicit_start_provided = _clip_field_provided_in_post(clip_start_raw)
@@ -789,9 +822,9 @@ def parse_download_options(post: dict) -> dict:
         clip_start = explicit_start
     elif explicit_end_provided:
         clip_start = 0.0
-    elif url_t is not None:
-        clip_start = url_t
     else:
+        # Playback timestamps embedded in a YouTube URL are intentionally not
+        # clip instructions. Only explicit API clip fields can shorten audio.
         clip_start = None
     clip_end = explicit_end
     if clip_end is not None and clip_start is None:
@@ -921,12 +954,9 @@ async def subscribe(request):
     except ValueError as exc:
         raise web.HTTPBadRequest(reason=str(exc)) from exc
 
-    # A t= timestamp in the URL means "start playing here" and parse_download_options
-    # turns it into a clip start, which is right for a one-off download of that video.
-    # A subscription URL is a channel or playlist, so a timestamp left on it says
-    # nothing about the videos it will yield — honour clip fields only when the
-    # caller supplied them explicitly, rather than silently clipping every future
-    # download. The t= param is still stripped from the stored URL.
+    # YouTube playback offsets are stripped from stored URLs and never become
+    # clip instructions. Subscriptions still honour clip fields when an API caller
+    # explicitly supplies them.
     clip_given = (
         _clip_field_provided_in_post(post.get('clip_start'))
         or _clip_field_provided_in_post(post.get('clip_end'))

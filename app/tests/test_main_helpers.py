@@ -23,7 +23,7 @@ class MigrateLegacyRequestTests(unittest.TestCase):
         self.assertEqual(post["codec"], "auto")
         self.assertEqual(post["format"], "m4a")
 
-    def test_legacy_non_audio_requests_become_mp3_320(self):
+    def test_legacy_non_audio_requests_become_mp3_best(self):
         for post in (
             {"format": "thumbnail", "quality": "best"},
             {"format": "captions", "subtitle_format": "vtt", "quality": "best"},
@@ -35,14 +35,14 @@ class MigrateLegacyRequestTests(unittest.TestCase):
                 self.assertEqual(post["download_type"], "audio")
                 self.assertEqual(post["codec"], "auto")
                 self.assertEqual(post["format"], "mp3")
-                self.assertEqual(post["quality"], "320")
+                self.assertEqual(post["quality"], "best")
 
-    def test_legacy_audio_quality_marker_becomes_mp3_320(self):
+    def test_legacy_audio_quality_marker_becomes_mp3_best(self):
         post = {"format": "mp4", "quality": "audio", "video_codec": "h264"}
         main._migrate_legacy_request(post)
         self.assertEqual(post["download_type"], "audio")
         self.assertEqual(post["format"], "mp3")
-        self.assertEqual(post["quality"], "320")
+        self.assertEqual(post["quality"], "best")
 
 
 class ParseLogLevelTests(unittest.TestCase):
@@ -110,12 +110,12 @@ class ParseYtdlOverridesTests(unittest.TestCase):
 
 
 class ParseDownloadOptionsTests(unittest.TestCase):
-    def test_missing_media_fields_default_to_mp3_320(self):
+    def test_missing_media_fields_default_to_mp3_best(self):
         parsed = main.parse_download_options({"url": "https://example.com/v"})
         self.assertEqual(parsed["download_type"], "audio")
         self.assertEqual(parsed["codec"], "auto")
         self.assertEqual(parsed["format"], "mp3")
-        self.assertEqual(parsed["quality"], "320")
+        self.assertEqual(parsed["quality"], "best")
 
     def test_explicit_alternate_audio_format_is_preserved(self):
         parsed = main.parse_download_options({
@@ -136,7 +136,7 @@ class ParseDownloadOptionsTests(unittest.TestCase):
                 "quality": "best",
             })
 
-    def test_obsolete_video_fields_are_forced_to_mp3_320(self):
+    def test_obsolete_video_fields_are_forced_to_mp3_best(self):
         parsed = main.parse_download_options({
             "url": "https://example.com/v",
             "download_type": "video",
@@ -147,7 +147,7 @@ class ParseDownloadOptionsTests(unittest.TestCase):
         self.assertEqual(parsed["download_type"], "audio")
         self.assertEqual(parsed["codec"], "auto")
         self.assertEqual(parsed["format"], "mp3")
-        self.assertEqual(parsed["quality"], "320")
+        self.assertEqual(parsed["quality"], "best")
 
     def test_accepts_known_preset_and_overrides(self):
         previous = dict(main.config.YTDL_OPTIONS_PRESETS)
@@ -245,7 +245,7 @@ class ParseDownloadOptionsTests(unittest.TestCase):
         self.assertEqual(parsed["clip_start"], 146.0)
         self.assertEqual(parsed["clip_end"], 204.0)
 
-    def test_clip_url_t_param_strips_query_and_sets_start(self):
+    def test_youtube_t_param_is_stripped_but_does_not_clip_audio(self):
         parsed = main.parse_download_options({
             "url": "https://www.youtube.com/watch?v=1&t=855s",
             "download_type": "video",
@@ -254,7 +254,17 @@ class ParseDownloadOptionsTests(unittest.TestCase):
             "quality": "best",
         })
         self.assertEqual(parsed["url"], "https://www.youtube.com/watch?v=1")
-        self.assertEqual(parsed["clip_start"], 855.0)
+        self.assertIsNone(parsed["clip_start"])
+        self.assertIsNone(parsed["clip_end"])
+
+    def test_youtube_playback_offsets_are_all_removed(self):
+        parsed = main.parse_download_options({
+            "url": "https://www.youtube.com/watch?v=1&t=1s&start=2&time_continue=3&end=4&list=PL1#t=5s",
+            "format": "mp3",
+            "quality": "best",
+        })
+        self.assertEqual(parsed["url"], "https://www.youtube.com/watch?v=1&list=PL1")
+        self.assertIsNone(parsed["clip_start"])
         self.assertIsNone(parsed["clip_end"])
 
     def test_clip_explicit_start_wins_over_url_t(self):
